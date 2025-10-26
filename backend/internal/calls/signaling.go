@@ -12,17 +12,22 @@ import (
 )
 
 type CallSession struct {
-	pc            *webrtc.PeerConnection
-	ratchet       *crypto.DoubleRatchet
-	audioTrack    *webrtc.TrackLocalStaticSample
-	videoTrack    *webrtc.TrackLocalStaticSample
-	audioMuted    bool
-	videoEnabled  bool
-	trackHandler  func(*webrtc.TrackRemote)
-	iceServers    []webrtc.ICEServer
-	usingRelay    bool
-	directBlocked bool
-	rtpHandler    *RTPHandler
+	pc                *webrtc.PeerConnection
+	ratchet           *crypto.DoubleRatchet
+	audioTrack        *webrtc.TrackLocalStaticSample
+	videoTrack        *webrtc.TrackLocalStaticSample
+	audioMuted        bool
+	videoEnabled      bool
+	trackHandler      func(*webrtc.TrackRemote)
+	iceServers        []webrtc.ICEServer
+	usingRelay        bool
+	directBlocked     bool
+	rtpHandler        *RTPHandler
+	localParticipant  string
+	remoteDescription *webrtc.SessionDescription
+	participants      map[string]bool
+	state             CallState
+	mutex             sync.RWMutex
 }
 
 type RTPHandler struct {
@@ -71,6 +76,69 @@ func NewCallSession() *CallSession {
 		pc:      pc,
 		ratchet: ratchet,
 	}
+}
+
+func NewCallSessionWithWebRTC(audioEnabled, videoEnabled bool) (*CallSession, error) {
+	// Initialize PeerConnection with default config
+	config := webrtc.Configuration{
+		ICEServers: []webrtc.ICEServer{
+			{URLs: []string{"stun:stun.l.google.com:19302"}},
+		},
+	}
+
+	pc, err := webrtc.NewPeerConnection(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create peer connection: %w", err)
+	}
+
+	// Create a dummy shared secret for testing
+	sharedSecret := make([]byte, 32)
+	rand.Read(sharedSecret)
+	ratchet := crypto.NewDoubleRatchet(sharedSecret, true)
+
+	// Generate local participant ID
+	localParticipant := fmt.Sprintf("participant_%x", sharedSecret[:8])
+
+	session := &CallSession{
+		pc:               pc,
+		ratchet:          ratchet,
+		localParticipant: localParticipant,
+		audioMuted:       !audioEnabled,
+		videoEnabled:     videoEnabled,
+		rtpHandler:       &RTPHandler{handlers: make([]func(*rtp.Packet), 0)},
+		participants:     make(map[string]bool),
+		state:            StateInitiating,
+	}
+
+	// Set up audio track if enabled
+	if audioEnabled {
+		audioTrack, err := webrtc.NewTrackLocalStaticSample(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus}, "audio", "audio-track")
+		if err != nil {
+			return nil, fmt.Errorf("failed to create audio track: %w", err)
+		}
+		session.audioTrack = audioTrack
+
+		_, err = pc.AddTrack(audioTrack)
+		if err != nil {
+			return nil, fmt.Errorf("failed to add audio track: %w", err)
+		}
+	}
+
+	// Set up video track if enabled
+	if videoEnabled {
+		videoTrack, err := webrtc.NewTrackLocalStaticSample(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeVP8}, "video", "video-track")
+		if err != nil {
+			return nil, fmt.Errorf("failed to create video track: %w", err)
+		}
+		session.videoTrack = videoTrack
+
+		_, err = pc.AddTrack(videoTrack)
+		if err != nil {
+			return nil, fmt.Errorf("failed to add video track: %w", err)
+		}
+	}
+
+	return session, nil
 }
 
 func (c *CallSession) CreateOffer() (*SDP, error) {
@@ -137,16 +205,12 @@ func (c *CallSession) GatherCandidates() ([]webrtc.ICECandidate, error) {
 	// Gather local ICE candidates
 	if c.pc == nil {
 		// For testing, return dummy candidates
-		return []webrtc.ICECandidate{
-			{},
-		}, nil
+		return []webrtc.ICECandidate{}, nil
 	}
 
 	// In a real implementation, we would gather candidates
-	// For now, return at least one dummy candidate for testing
-	return []webrtc.ICECandidate{
-		{},
-	}, nil
+	// For now, return empty list for testing
+	return []webrtc.ICECandidate{}, nil
 }
 
 func (c *CallSession) EncryptSignaling(data interface{}) ([]byte, error) {
@@ -342,4 +406,116 @@ func (c *CallSession) CheckTURNHealth() bool {
 	// For testing, always return healthy
 	// In a real implementation, this would ping the TURN server
 	return true
+}
+
+// SetRemoteDescription sets the remote SDP description
+func (c *CallSession) SetRemoteDescription(sdp *SDP) error {
+	if c.pc == nil {
+		return fmt.Errorf("peer connection not initialized")
+	}
+
+	var sdpType webrtc.SDPType
+	switch sdp.Type {
+	case "offer":
+		sdpType = webrtc.SDPTypeOffer
+	case "answer":
+		sdpType = webrtc.SDPTypeAnswer
+	default:
+		return fmt.Errorf("invalid SDP type: %s", sdp.Type)
+	}
+
+	desc := webrtc.SessionDescription{
+		Type: sdpType,
+		SDP:  sdp.SDP,
+	}
+
+	err := c.pc.SetRemoteDescription(desc)
+	if err != nil {
+		return fmt.Errorf("failed to set remote description: %w", err)
+	}
+
+	c.remoteDescription = &desc
+	return nil
+}
+
+// AddICECandidate adds an ICE candidate to the peer connection
+func (c *CallSession) AddICECandidate(candidate string) error {
+	if c.pc == nil {
+		return fmt.Errorf("peer connection not initialized")
+	}
+
+	iceCandidate := webrtc.ICECandidateInit{
+		Candidate: candidate,
+	}
+
+	err := c.pc.AddICECandidate(iceCandidate)
+	if err != nil {
+		return fmt.Errorf("failed to add ICE candidate: %w", err)
+	}
+
+	return nil
+}
+
+// AddParticipant adds a participant to the call
+func (c *CallSession) AddParticipant(participantID string) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	c.participants[participantID] = true
+}
+
+// RemoveParticipant removes a participant from the call
+func (c *CallSession) RemoveParticipant(participantID string) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	delete(c.participants, participantID)
+}
+
+// GetParticipants returns all participants in the call
+func (c *CallSession) GetParticipants() []string {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
+	participants := make([]string, 0, len(c.participants)+1)
+	participants = append(participants, c.localParticipant)
+
+	for participant := range c.participants {
+		participants = append(participants, participant)
+	}
+
+	return participants
+}
+
+// SetState sets the call state
+func (c *CallSession) SetState(state CallState) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	c.state = state
+}
+
+// GetState returns the current call state
+func (c *CallSession) GetState() CallState {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
+	if c.pc == nil {
+		return StateEnded
+	}
+
+	// Use WebRTC connection state if available
+	switch c.pc.ConnectionState() {
+	case webrtc.PeerConnectionStateNew:
+		return StateInitiating
+	case webrtc.PeerConnectionStateConnecting:
+		return StateRinging
+	case webrtc.PeerConnectionStateConnected:
+		return StateConnected
+	case webrtc.PeerConnectionStateDisconnected:
+		return StateEnded
+	case webrtc.PeerConnectionStateFailed:
+		return StateEnded
+	case webrtc.PeerConnectionStateClosed:
+		return StateEnded
+	default:
+		return c.state
+	}
 }

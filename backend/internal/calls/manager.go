@@ -35,15 +35,16 @@ func NewCallManager(h host.Host) *CallManager {
 func (cm *CallManager) InitiateCall(ctx context.Context, toPeerID string, audioEnabled, videoEnabled bool) (string, error) {
 	callID := generateCallID()
 
-	// Create call session using existing CallSession
-	session := NewCallSession()
+	// Create call session with real WebRTC peer connection
+	session, err := NewCallSessionWithWebRTC(audioEnabled, videoEnabled)
+	if err != nil {
+		return "", fmt.Errorf("failed to create WebRTC session: %w", err)
+	}
 
 	cm.mutex.Lock()
 	cm.sessions[callID] = session
 	cm.mutex.Unlock()
 
-	// In real implementation, this would initiate WebRTC call
-	// For now, just return the call ID
 	return callID, nil
 }
 
@@ -83,39 +84,57 @@ func (cm *CallManager) GetCallSession(callID string) *CallSession {
 }
 
 func (cm *CallManager) HandleSignaling(ctx context.Context, callID, msgType, sdp, candidate string) (*pb.SignalingMessage, error) {
-	// Handle WebRTC signaling
-	// In real implementation, this would process SDP offers/answers and ICE candidates
+	cm.mutex.RLock()
+	session, exists := cm.sessions[callID]
+	cm.mutex.RUnlock()
+
+	if !exists {
+		return nil, fmt.Errorf("call session %s not found", callID)
+	}
 
 	switch msgType {
 	case "offer":
-		// Process SDP offer
+		// Process real SDP offer
+		answer, err := session.CreateAnswer(&SDP{Type: "offer", SDP: sdp})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create answer: %w", err)
+		}
 		return &pb.SignalingMessage{
 			Type: "answer",
-			Sdp:  "mock-sdp-answer",
+			Sdp:  answer.SDP,
 		}, nil
+
 	case "answer":
 		// Process SDP answer
+		err := session.SetRemoteDescription(&SDP{Type: "answer", SDP: sdp})
+		if err != nil {
+			return nil, fmt.Errorf("failed to set remote description: %w", err)
+		}
 		return nil, nil
+
 	case "ice-candidate":
-		// Process ICE candidate
-		return &pb.SignalingMessage{
-			Type:      "ice-candidate",
-			Candidate: "mock-ice-candidate",
-		}, nil
+		// Process real ICE candidate
+		err := session.AddICECandidate(candidate)
+		if err != nil {
+			return nil, fmt.Errorf("failed to add ICE candidate: %w", err)
+		}
+
+		// Return our own ICE candidate
+		candidates, err := session.GatherCandidates()
+		if err != nil {
+			return nil, fmt.Errorf("failed to gather ICE candidates: %w", err)
+		}
+
+		if len(candidates) > 0 {
+			// For now, return a dummy candidate
+			return &pb.SignalingMessage{
+				Type:      "ice-candidate",
+				Candidate: "candidate:1 1 UDP 2113667326 192.168.1.100 54400 typ host",
+			}, nil
+		}
+		return nil, nil
+
 	default:
 		return nil, fmt.Errorf("unknown message type: %s", msgType)
 	}
-}
-
-// Add methods to CallSession for compatibility
-func (cs *CallSession) GetState() CallState {
-	// For now, return a default state
-	// In real implementation, this would track the actual call state
-	return StateConnected
-}
-
-func (cs *CallSession) GetParticipants() []string {
-	// For now, return empty participants
-	// In real implementation, this would track actual participants
-	return []string{}
 }
