@@ -24,13 +24,13 @@ interface ChatConversationScreenProps {
 }
 
 export function ChatConversationScreen({ peerId, onBack }: ChatConversationScreenProps) {
-  const { peers, messages, sendMessage } = useChatStore();
+  const { conversations, messages, sendMessage, getConversation } = useChatStore();
   const [inputText, setInputText] = useState('');
   const flatListRef = useRef<FlatList>(null);
 
   const currentUserId = mockBackend.getCurrentUserId();
-  const peer = peers.find((p) => p.id === peerId);
   const conversation = messages[peerId] || [];
+  const peer = getConversation(peerId);
 
   useEffect(() => {
     // Scroll to bottom when messages change
@@ -115,6 +115,22 @@ export function ChatConversationScreen({ peerId, onBack }: ChatConversationScree
             </Text>
             <Text style={styles.encryptionBadge}>🔒 E2EE</Text>
           </View>
+        </View>
+
+        {/* Call Buttons */}
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            style={styles.callButton}
+            onPress={() => console.log('Voice call initiated')}
+          >
+            <Text style={styles.callButtonText}>📞</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.callButton}
+            onPress={() => console.log('Video call initiated')}
+          >
+            <Text style={styles.callButtonText}>📹</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -206,6 +222,18 @@ const styles = StyleSheet.create({
   encryptionBadge: {
     fontSize: 11,
     color: '#10B981',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 8,
+  },
+  callButton: {
+    padding: 8,
+    marginLeft: 4,
+  },
+  callButtonText: {
+    fontSize: 22,
   },
   messagesContainer: {
     paddingHorizontal: 16,

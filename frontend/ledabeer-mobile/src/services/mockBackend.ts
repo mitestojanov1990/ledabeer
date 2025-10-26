@@ -22,8 +22,18 @@ export interface Peer {
   lastSeen: number;
 }
 
+export interface Group {
+  id: string;
+  name: string;
+  description: string;
+  members: string[];
+  admins: string[];
+  createdAt: number;
+}
+
 class MockBackendService {
   private peers: Map<string, Peer> = new Map();
+  private groups: Map<string, Group> = new Map();
   private messages: Message[] = [];
   private currentUserId: string = 'user-1';
   private messageListeners: Array<(message: Message) => void> = [];
@@ -56,6 +66,25 @@ class MockBackendService {
       publicKey: 'mock-public-key-charlie',
       online: true,
       lastSeen: Date.now(),
+    });
+
+    // Add some mock groups
+    this.groups.set('group-1', {
+      id: 'group-1',
+      name: 'Team Alpha',
+      description: 'Project discussion group',
+      members: [this.currentUserId, 'peer-1', 'peer-2'],
+      admins: [this.currentUserId],
+      createdAt: Date.now() - 86400000, // 1 day ago
+    });
+
+    this.groups.set('group-2', {
+      id: 'group-2',
+      name: 'Coffee Lovers',
+      description: 'Casual chat',
+      members: [this.currentUserId, 'peer-1', 'peer-3'],
+      admins: [this.currentUserId, 'peer-1'],
+      createdAt: Date.now() - 172800000, // 2 days ago
     });
 
     // Add some mock messages
@@ -173,6 +202,77 @@ class MockBackendService {
    */
   getCurrentUserId(): string {
     return this.currentUserId;
+  }
+
+  /**
+   * Get all groups
+   */
+  async getGroups(): Promise<Group[]> {
+    await this.simulateNetworkDelay();
+    return Array.from(this.groups.values());
+  }
+
+  /**
+   * Get a specific group
+   */
+  async getGroup(groupId: string): Promise<Group | undefined> {
+    await this.simulateNetworkDelay();
+    return this.groups.get(groupId);
+  }
+
+  /**
+   * Create a new group
+   */
+  async createGroup(name: string, description: string, memberIds: string[]): Promise<Group> {
+    await this.simulateNetworkDelay();
+
+    const group: Group = {
+      id: `group-${Date.now()}`,
+      name,
+      description,
+      members: [this.currentUserId, ...memberIds],
+      admins: [this.currentUserId],
+      createdAt: Date.now(),
+    };
+
+    this.groups.set(group.id, group);
+    return group;
+  }
+
+  /**
+   * Get all conversations (peers + groups)
+   */
+  async getAllConversations(): Promise<Array<Peer | Group>> {
+    await this.simulateNetworkDelay();
+    const peers = Array.from(this.peers.values());
+    const groups = Array.from(this.groups.values());
+    return [...peers, ...groups];
+  }
+
+  /**
+   * Check if ID is a group
+   */
+  isGroup(id: string): boolean {
+    return id.startsWith('group-');
+  }
+
+  /**
+   * Send a group message
+   */
+  async sendGroupMessage(groupId: string, content: string): Promise<Message> {
+    await this.simulateNetworkDelay();
+
+    const message: Message = {
+      id: `msg-${Date.now()}`,
+      from: this.currentUserId,
+      to: groupId,
+      content,
+      timestamp: Date.now(),
+      encrypted: true,
+    };
+
+    this.messages.push(message);
+    return message;
   }
 
   private startMessageSimulation() {

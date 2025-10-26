@@ -21,10 +21,10 @@ interface ChatListScreenProps {
 }
 
 export function ChatListScreen({ onSelectChat }: ChatListScreenProps) {
-  const { peers, messages, loading, loadPeers, initializeMessageListener } = useChatStore();
+  const { conversations, messages, loading, loadConversations, initializeMessageListener } = useChatStore();
 
   useEffect(() => {
-    loadPeers();
+    loadConversations();
     initializeMessageListener();
   }, []);
 
@@ -84,7 +84,7 @@ export function ChatListScreen({ onSelectChat }: ChatListScreenProps) {
     );
   };
 
-  if (loading && peers.length === 0) {
+  if (loading && conversations.length === 0) {
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color="#3B82F6" />
@@ -101,7 +101,7 @@ export function ChatListScreen({ onSelectChat }: ChatListScreenProps) {
       </View>
 
       <FlatList
-        data={peers}
+        data={conversations}
         renderItem={renderChatItem}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}

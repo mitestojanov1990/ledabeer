@@ -83,10 +83,18 @@ export class GrpcWebBackendClient {
       console.log('[GrpcWebBackendClient] Connecting to', this.host);
 
       // Test connection with a simple health check
-      const response = await fetch(`${this.host}/`);
+      // Note: 415, 400, or CORS errors are expected for root path - Envoy is still accessible
+      const response = await fetch(`${this.host}/`).catch((e) => {
+        // Fetch will throw on CORS or network errors
+        // But if we get ANY response, Envoy is running
+        return { ok: false, status: 0 };
+      });
 
-      if (response.ok || response.status === 400) {
-        // 400 is expected for root path without proper gRPC headers
+      // Accept various status codes that indicate Envoy is responding
+      if (response.ok || response.status === 400 || response.status === 415) {
+        // 400 = Bad Request (missing gRPC headers)
+        // 415 = Unsupported Media Type (not a gRPC request)
+        // Both mean Envoy is running and accessible
         this.connected = true;
         console.log('[GrpcWebBackendClient] Connected successfully');
       } else {

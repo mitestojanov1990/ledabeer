@@ -5,7 +5,7 @@
  * Automatically falls back to mock if backend is unavailable
  */
 
-import { getGrpcWebClient } from './grpcWeb/client';
+import { getRealGrpcWebClient } from './grpcWeb/realClient';
 import { mockBackend, Message as MockMessage, Peer, Group } from './mockBackend';
 
 // Configuration
@@ -50,7 +50,7 @@ export interface BackendService {
  * Real gRPC-Web Backend Implementation
  */
 class RealBackendService implements BackendService {
-  private grpcClient = getGrpcWebClient();
+  private grpcClient = getRealGrpcWebClient();
   private messageCallbacks: Array<(message: MockMessage) => void> = [];
 
   async connect(): Promise<void> {
@@ -146,7 +146,6 @@ class RealBackendService implements BackendService {
         content,
         timestamp: response.timestamp,
         encrypted: true,
-        type: 'text',
       };
 
       // Notify listeners
@@ -170,7 +169,6 @@ class RealBackendService implements BackendService {
         content,
         timestamp: response.timestamp,
         encrypted: true,
-        type: 'text',
       };
 
       // Notify listeners
@@ -196,7 +194,6 @@ class RealBackendService implements BackendService {
         content: decoder.decode(grpcMsg.content),
         timestamp: grpcMsg.timestamp,
         encrypted: true,
-        type: 'text',
       };
       callback(message);
     });
