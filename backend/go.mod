@@ -13,15 +13,19 @@ require (
 )
 
 require (
+	github.com/alecthomas/units v0.0.0-20240927000941-0f3dac36c52b // indirect
 	github.com/benbjohnson/clock v1.3.5 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/crackcomm/go-gitignore v0.0.0-20241020182519-7843d2ba8fdf // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/davidlazar/go-crypto v0.0.0-20200604182044-b73af7476f6c // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.0 // indirect
 	github.com/filecoin-project/go-clock v0.1.0 // indirect
 	github.com/flynn/noise v1.1.0 // indirect
 	github.com/francoispqt/gojay v1.2.13 // indirect
+	github.com/gammazero/chanqueue v1.1.1 // indirect
+	github.com/gammazero/deque v1.1.0 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
@@ -31,10 +35,21 @@ require (
 	github.com/hashicorp/golang-lru v1.0.2 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/huin/goupnp v1.3.0 // indirect
+	github.com/ipfs/bbloom v0.0.4 // indirect
 	github.com/ipfs/boxo v0.35.0 // indirect
+	github.com/ipfs/go-bitfield v1.1.0 // indirect
+	github.com/ipfs/go-block-format v0.2.3 // indirect
 	github.com/ipfs/go-cid v0.5.0 // indirect
+	github.com/ipfs/go-cidutil v0.1.0 // indirect
 	github.com/ipfs/go-datastore v0.9.0 // indirect
+	github.com/ipfs/go-dsqueue v0.0.5 // indirect
+	github.com/ipfs/go-ipfs-cmds v0.15.0 // indirect
+	github.com/ipfs/go-ipld-format v0.6.3 // indirect
+	github.com/ipfs/go-ipld-legacy v0.2.2 // indirect
 	github.com/ipfs/go-log/v2 v2.8.1 // indirect
+	github.com/ipfs/go-metrics-interface v0.3.0 // indirect
+	github.com/ipfs/kubo v0.38.1 // indirect
+	github.com/ipld/go-codec-dagpb v1.7.0 // indirect
 	github.com/ipld/go-ipld-prime v0.21.0 // indirect
 	github.com/jackpal/go-nat-pmp v1.0.2 // indirect
 	github.com/jbenet/go-temp-err-catcher v0.1.0 // indirect
@@ -103,6 +118,8 @@ require (
 	github.com/quic-go/quic-go v0.55.0 // indirect
 	github.com/quic-go/webtransport-go v0.9.0 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
+	github.com/whyrusleeping/base32 v0.0.0-20170828182744-c30ac30633cc // indirect
+	github.com/whyrusleeping/chunker v0.0.0-20181014151217-fe64bd25879f // indirect
 	github.com/whyrusleeping/go-keyspace v0.0.0-20160322163242-5b898ac5add1 // indirect
 	github.com/wlynxg/anet v0.0.5 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
