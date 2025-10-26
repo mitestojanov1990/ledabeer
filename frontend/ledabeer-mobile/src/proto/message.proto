@@ -1,0 +1,44 @@
+syntax = "proto3";
+package ledabeer;
+
+option go_package = "ledabeer/backend/pkg/proto";
+
+service MessageService {
+    rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
+    rpc ReceiveMessages(ReceiveMessagesRequest) returns (stream Message);
+    rpc SendGroupMessage(SendGroupMessageRequest) returns (SendMessageResponse);
+    rpc GetMessageHistory(GetMessageHistoryRequest) returns (MessageHistoryResponse);
+}
+
+message SendMessageRequest {
+    string to_peer_id = 1;
+    bytes content = 2;
+}
+
+message SendMessageResponse {
+    string message_id = 1;
+    int64 timestamp = 2;
+}
+
+message Message {
+    string message_id = 1;
+    string from_peer_id = 2;
+    bytes content = 3;
+    int64 timestamp = 4;
+}
+
+message ReceiveMessagesRequest {}
+
+message SendGroupMessageRequest {
+    string group_id = 1;
+    bytes content = 2;
+}
+
+message GetMessageHistoryRequest {
+    string peer_id = 1;
+    int32 limit = 2;
+}
+
+message MessageHistoryResponse {
+    repeated Message messages = 1;
+}

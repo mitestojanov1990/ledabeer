@@ -7,6 +7,7 @@ services:
     container_name: ledabeer-bootstrap
     ports:
       - "4001:4001"
+      - "50051:50051"
     environment:
       - NODE_ROLE=bootstrap
     networks:
@@ -78,6 +79,21 @@ services:
         "--bootstrap-peer",
         "/dns4/bootstrap/tcp/4001/p2p/12D3KooWBootstrap",
       ]
+
+  # Envoy proxy for gRPC-Web
+  envoy:
+    image: envoyproxy/envoy:v1.28-latest
+    container_name: ledabeer-envoy
+    ports:
+      - "8080:8080"
+      - "9901:9901"
+    volumes:
+      - ./envoy.yaml:/etc/envoy/envoy.yaml
+    networks:
+      - ledabeer-network
+    depends_on:
+      - bootstrap
+    command: /usr/local/bin/envoy -c /etc/envoy/envoy.yaml
 
 networks:
   ledabeer-network:

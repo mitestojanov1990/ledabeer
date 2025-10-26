@@ -1,0 +1,65 @@
+syntax = "proto3";
+package ledabeer;
+
+option go_package = "ledabeer/backend/pkg/proto";
+
+service CallService {
+    rpc InitiateCall(InitiateCallRequest) returns (InitiateCallResponse);
+    rpc AnswerCall(AnswerCallRequest) returns (AnswerCallResponse);
+    rpc EndCall(EndCallRequest) returns (EndCallResponse);
+    rpc StreamSignaling(stream SignalingMessage) returns (stream SignalingMessage);
+    rpc GetCallState(GetCallStateRequest) returns (CallState);
+}
+
+message InitiateCallRequest {
+    string to_peer_id = 1;
+    bool audio_enabled = 2;
+    bool video_enabled = 3;
+}
+
+message InitiateCallResponse {
+    string call_id = 1;
+    CallState state = 2;
+}
+
+message AnswerCallRequest {
+    string call_id = 1;
+    bool accept = 2;
+}
+
+message AnswerCallResponse {
+    CallState state = 1;
+}
+
+message EndCallRequest {
+    string call_id = 1;
+}
+
+message EndCallResponse {
+    bool success = 1;
+}
+
+message SignalingMessage {
+    string call_id = 1;
+    string type = 2; // "offer", "answer", "ice_candidate"
+    string sdp = 3;
+    string candidate = 4;
+}
+
+message GetCallStateRequest {
+    string call_id = 1;
+}
+
+message CallState {
+    string call_id = 1;
+    CallStateEnum state = 2;
+    repeated string participants = 3;
+}
+
+enum CallStateEnum {
+    UNKNOWN = 0;
+    INITIATING = 1;
+    RINGING = 2;
+    CONNECTED = 3;
+    ENDED = 4;
+}
