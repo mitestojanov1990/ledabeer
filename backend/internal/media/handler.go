@@ -41,6 +41,11 @@ func NewMediaHandler(ipfs *storage.IPFSNode) *MediaHandler {
 	return &MediaHandler{ipfs: ipfs}
 }
 
+// SetCryptoHandler sets the crypto handler for encryption/decryption
+func (m *MediaHandler) SetCryptoHandler(crypto CryptoHandler) {
+	m.crypto = crypto
+}
+
 func (m *MediaHandler) StoreMedia(ctx context.Context, chunks [][]byte) (string, int64, error) {
 	// Reassemble chunks
 	var data []byte

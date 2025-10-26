@@ -1,0 +1,161 @@
+# Backend TODO Comments and Notes
+
+**Generated:** 2025-10-26  
+**Total TODO/Note Items Found:** 10
+
+---
+
+## 📝 TODO Comments and Implementation Notes
+
+### 1. Connection Pool Health Checks
+**File:** `backend/internal/network/connection_pool_test.go:368-369`
+```go
+// Note: The connection pool doesn't automatically detect when a remote host is closed
+// In a real implementation, this would be handled by connection health checks
+```
+**Priority:** Medium  
+**Description:** Connection pool needs automatic health checks to detect when remote hosts are closed.
+
+---
+
+### 2. PubSub Message Synchronization
+**File:** `backend/internal/messaging/group_chat_test.go:162-163`
+```go
+// Note: In a real implementation, this would be synchronized via pubsub messages
+// For this simplified version, we only check the manager that added the member
+```
+**Priority:** High  
+**Description:** Group member management needs proper PubSub synchronization across all nodes.
+
+---
+
+### 3. PubSub Member Removal Synchronization
+**File:** `backend/internal/messaging/group_chat_test.go:176-177`
+```go
+// Note: In a real implementation, this would be synchronized via pubsub messages
+// For this simplified version, we only check the manager that removed the member
+```
+**Priority:** High  
+**Description:** Member removal from groups needs proper PubSub synchronization.
+
+---
+
+### 4. PubSub Member State Synchronization
+**File:** `backend/internal/messaging/group_chat_test.go:237-238`
+```go
+// Note: In a real implementation, this would be synchronized via pubsub messages
+// For this simplified version, we only check that the leaving member is not in their own group
+```
+**Priority:** High  
+**Description:** Group member state changes need proper PubSub synchronization across all nodes.
+
+---
+
+### 5. Call Session Cleanup Behavior
+**File:** `backend/internal/integration/call_manager_test.go:56`
+```go
+// Note: GetCallSession may return nil after EndCall, which is expected behavior
+```
+**Priority:** Low  
+**Description:** Documented behavior - call sessions are cleaned up after EndCall.
+
+---
+
+### 6. Media Encryption Implementation
+**File:** `backend/internal/api/grpc/media_service_integration_test.go:98-99`
+```go
+// Note: In this simplified implementation, data might not be encrypted
+// but we can verify it was stored correctly
+```
+**Priority:** High  
+**Description:** Media storage needs proper encryption implementation.
+
+---
+
+### 7. PubSub Message Count Variability
+**File:** `backend/internal/integration/group_messaging_test.go:179-180`
+```go
+// Note: Due to pubsub message propagation and deduplication, exact counts may vary
+// We check that messages are present rather than exact counts
+```
+**Priority:** Medium  
+**Description:** PubSub message deduplication affects exact message counts in tests.
+
+---
+
+### 8. Generated Code Notes (Protobuf)
+**Files:** 
+- `backend/pkg/proto/message_grpc.pb.go:109-110`
+- `backend/pkg/proto/media_grpc.pb.go:112-113`
+- `backend/pkg/proto/call_grpc.pb.go:115-116`
+
+```go
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+```
+**Priority:** Low  
+**Description:** Generated protobuf code note about embedding by value.
+
+---
+
+## 🎯 Priority Summary
+
+### High Priority (3 items)
+1. **PubSub Message Synchronization** - Group member management
+2. **PubSub Member Removal Synchronization** - Member removal from groups  
+3. **Media Encryption Implementation** - Media storage encryption
+
+### Medium Priority (2 items)
+1. **Connection Pool Health Checks** - Automatic host closure detection
+2. **PubSub Message Count Variability** - Test reliability improvements
+
+### Low Priority (3 items)
+1. **Call Session Cleanup Behavior** - Documented behavior
+2. **Generated Code Notes** - Protobuf implementation notes
+
+---
+
+## 🔧 Implementation Recommendations
+
+### 1. PubSub Synchronization
+- Implement proper PubSub message broadcasting for group member changes
+- Add message ordering and conflict resolution
+- Ensure all nodes receive member state updates
+
+### 2. Media Encryption
+- Integrate with existing E2EE system
+- Encrypt media content before IPFS storage
+- Add decryption on retrieval
+
+### 3. Connection Pool Health Checks
+- Implement periodic connection health checks
+- Add automatic reconnection logic
+- Monitor connection quality metrics
+
+### 4. Test Reliability
+- Improve PubSub message count assertions
+- Add retry logic for flaky tests
+- Implement better test synchronization
+
+---
+
+## 📊 Code Quality Metrics
+
+- **Total TODO Items:** 10
+- **High Priority:** 3 (30%)
+- **Medium Priority:** 2 (20%)
+- **Low Priority:** 3 (30%)
+- **Generated Code Notes:** 2 (20%)
+
+---
+
+## 🚀 Next Steps
+
+1. **Immediate:** Address high-priority PubSub synchronization issues
+2. **Short-term:** Implement media encryption
+3. **Medium-term:** Add connection pool health checks
+4. **Long-term:** Improve test reliability and documentation
+
+---
+
+*This file was automatically generated by scanning the backend codebase for TODO comments and implementation notes.*
