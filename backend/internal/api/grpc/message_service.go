@@ -91,13 +91,10 @@ func (s *MessageService) SendGroupMessage(ctx context.Context, req *pb.SendGroup
 	}
 
 	// Send via real group manager
-	err := s.groupManager.SendGroupMessage(req.GroupId, string(req.Content))
+	messageID, err := s.groupManager.SendGroupMessage(ctx, req.GroupId, req.Content)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send group message: %w", err)
 	}
-
-	// Generate message ID for response
-	messageID := generateMessageID()
 
 	return &pb.SendMessageResponse{
 		MessageId: messageID,
