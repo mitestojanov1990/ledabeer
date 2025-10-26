@@ -50,7 +50,7 @@ func setupTestGateway(t *testing.T) *Gateway {
 	}
 
 	// Create mock services
-	msgService := grpcapi.NewMessageService(nil)
+	msgService := grpcapi.NewMessageService(nil, nil)
 	mediaService := grpcapi.NewMediaService(nil)
 	callService := grpcapi.NewCallService(nil)
 	auth := auth.NewAuthenticator()
