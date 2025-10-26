@@ -1,0 +1,49 @@
+syntax = "proto3";
+package ledabeer;
+
+option go_package = "ledabeer/backend/pkg/proto";
+
+service MediaService {
+    rpc UploadMedia(stream MediaChunk) returns (UploadMediaResponse);
+    rpc DownloadMedia(DownloadMediaRequest) returns (stream MediaChunk);
+    rpc GetMediaInfo(GetMediaInfoRequest) returns (MediaInfo);
+    rpc SendMediaMessage(SendMediaMessageRequest) returns (SendMediaMessageResponse);
+}
+
+message GetMediaInfoRequest {
+    string cid = 1;
+}
+
+message MediaChunk {
+    bytes data = 1;
+    int32 chunk_index = 2;
+    int32 total_chunks = 3;
+}
+
+message UploadMediaResponse {
+    string media_id = 1;
+    string cid = 2;
+    int64 size = 3;
+}
+
+message DownloadMediaRequest {
+    string cid = 1;
+}
+
+message MediaInfo {
+    string cid = 1;
+    string mime_type = 2;
+    int64 size = 3;
+    int64 timestamp = 4;
+}
+
+message SendMediaMessageRequest {
+    string to_peer_id = 1;
+    string media_cid = 2;
+    string mime_type = 3;
+}
+
+message SendMediaMessageResponse {
+    string message_id = 1;
+    int64 timestamp = 2;
+}
