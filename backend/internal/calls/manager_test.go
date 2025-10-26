@@ -7,7 +7,6 @@ import (
 	"ledabeer/backend/internal/calls"
 	"ledabeer/backend/internal/network"
 
-	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -20,17 +19,17 @@ func TestCallManager_InitiateCall(t *testing.T) {
 	require.NoError(t, err)
 	defer host.Close()
 
-	manager := calls.NewCallManager(host, nil)
+	manager := calls.NewCallManager(host)
 
 	// Create a dummy peer ID for testing
-	peerID := peer.ID("test-peer")
+	peerID := "test-peer"
 
-	callID, err := manager.InitiateCall(ctx, peerID, calls.CallOptions{})
+	callID, err := manager.InitiateCall(ctx, peerID, true, false)
 	require.NoError(t, err)
 	assert.NotEmpty(t, callID)
 }
 
-func TestCallManager_AcceptCall(t *testing.T) {
+func TestCallManager_AnswerCall(t *testing.T) {
 	ctx := context.Background()
 	host, err := network.NewHost(ctx, &network.Config{
 		ListenAddrs: []string{"/ip4/127.0.0.1/tcp/0"},
@@ -38,10 +37,14 @@ func TestCallManager_AcceptCall(t *testing.T) {
 	require.NoError(t, err)
 	defer host.Close()
 
-	manager := calls.NewCallManager(host, nil)
+	manager := calls.NewCallManager(host)
 
-	// Accept a call
-	err = manager.AcceptCall("test-call-id")
+	// First initiate a call
+	callID, err := manager.InitiateCall(ctx, "test-peer", true, false)
+	require.NoError(t, err)
+
+	// Then answer it
+	err = manager.AnswerCall(ctx, callID, true)
 	require.NoError(t, err)
 }
 
@@ -53,14 +56,18 @@ func TestCallManager_EndCall(t *testing.T) {
 	require.NoError(t, err)
 	defer host.Close()
 
-	manager := calls.NewCallManager(host, nil)
+	manager := calls.NewCallManager(host)
 
-	// End a call
-	err = manager.EndCall("test-call-id")
+	// First initiate a call
+	callID, err := manager.InitiateCall(ctx, "test-peer", true, false)
+	require.NoError(t, err)
+
+	// Then end it
+	err = manager.EndCall(ctx, callID)
 	require.NoError(t, err)
 }
 
-func TestCallManager_CreateGroupCall(t *testing.T) {
+func TestCallManager_GetCallSession(t *testing.T) {
 	ctx := context.Background()
 	host, err := network.NewHost(ctx, &network.Config{
 		ListenAddrs: []string{"/ip4/127.0.0.1/tcp/0"},
@@ -68,21 +75,18 @@ func TestCallManager_CreateGroupCall(t *testing.T) {
 	require.NoError(t, err)
 	defer host.Close()
 
-	manager := calls.NewCallManager(host, nil)
+	manager := calls.NewCallManager(host)
 
-	// Create group call with participants
-	participants := []peer.ID{
-		peer.ID("peer1"),
-		peer.ID("peer2"),
-		peer.ID("peer3"),
-	}
-
-	callID, err := manager.CreateGroupCall(participants)
+	// Initiate a call
+	callID, err := manager.InitiateCall(ctx, "test-peer", true, false)
 	require.NoError(t, err)
-	assert.NotEmpty(t, callID)
+
+	// Get the call session
+	session := manager.GetCallSession(callID)
+	assert.NotNil(t, session)
 }
 
-func TestCallManager_JoinGroupCall(t *testing.T) {
+func TestCallManager_HandleSignaling(t *testing.T) {
 	ctx := context.Background()
 	host, err := network.NewHost(ctx, &network.Config{
 		ListenAddrs: []string{"/ip4/127.0.0.1/tcp/0"},
@@ -90,64 +94,10 @@ func TestCallManager_JoinGroupCall(t *testing.T) {
 	require.NoError(t, err)
 	defer host.Close()
 
-	manager := calls.NewCallManager(host, nil)
+	manager := calls.NewCallManager(host)
 
-	// Join group call
-	err = manager.JoinGroupCall("test-group-call-id")
+	// Test signaling message handling
+	response, err := manager.HandleSignaling(ctx, "test-call-id", "offer", "test-sdp", "")
 	require.NoError(t, err)
-}
-
-func TestCallManager_MediaControls(t *testing.T) {
-	ctx := context.Background()
-	host, err := network.NewHost(ctx, &network.Config{
-		ListenAddrs: []string{"/ip4/127.0.0.1/tcp/0"},
-	})
-	require.NoError(t, err)
-	defer host.Close()
-
-	manager := calls.NewCallManager(host, nil)
-
-	// Test mute/unmute
-	err = manager.MuteAudio("test-call-id")
-	require.NoError(t, err)
-
-	err = manager.UnmuteAudio("test-call-id")
-	require.NoError(t, err)
-
-	// Test video enable/disable
-	err = manager.EnableVideo("test-call-id")
-	require.NoError(t, err)
-
-	err = manager.DisableVideo("test-call-id")
-	require.NoError(t, err)
-}
-
-func TestCallManager_GetCallState(t *testing.T) {
-	ctx := context.Background()
-	host, err := network.NewHost(ctx, &network.Config{
-		ListenAddrs: []string{"/ip4/127.0.0.1/tcp/0"},
-	})
-	require.NoError(t, err)
-	defer host.Close()
-
-	manager := calls.NewCallManager(host, nil)
-
-	// Get call state
-	state := manager.GetCallState("test-call-id")
-	assert.NotEmpty(t, state)
-}
-
-func TestCallManager_GetActiveCalls(t *testing.T) {
-	ctx := context.Background()
-	host, err := network.NewHost(ctx, &network.Config{
-		ListenAddrs: []string{"/ip4/127.0.0.1/tcp/0"},
-	})
-	require.NoError(t, err)
-	defer host.Close()
-
-	manager := calls.NewCallManager(host, nil)
-
-	// Get active calls
-	calls := manager.GetActiveCalls()
-	assert.NotNil(t, calls)
+	assert.NotNil(t, response)
 }

@@ -3,9 +3,11 @@ package calls
 import (
 	"crypto/rand"
 	"fmt"
+	"sync"
 
 	"ledabeer/backend/internal/crypto"
 
+	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v3"
 )
 
@@ -20,6 +22,13 @@ type CallSession struct {
 	iceServers    []webrtc.ICEServer
 	usingRelay    bool
 	directBlocked bool
+	rtpHandler    *RTPHandler
+}
+
+type RTPHandler struct {
+	handlers    []func(*rtp.Packet)
+	mutex       sync.RWMutex
+	packetCount int
 }
 
 type SDP struct {
