@@ -1,6 +1,10 @@
 package media_test
 
 import (
+	"bytes"
+	"image"
+	"image/color"
+	"image/jpeg"
 	"testing"
 
 	"ledabeer/backend/internal/media"
@@ -11,7 +15,7 @@ import (
 
 func TestMediaMessage_Metadata(t *testing.T) {
 	// Test metadata extraction from different file types
-	imageData := []byte("fake image data")
+	imageData := createTestJPEG(400, 300)
 	metadata, err := media.ExtractMetadata(imageData, "test-image.jpg")
 	require.NoError(t, err)
 
@@ -23,7 +27,7 @@ func TestMediaMessage_Metadata(t *testing.T) {
 
 func TestMediaMessage_Thumbnail(t *testing.T) {
 	// Test thumbnail generation for images
-	imageData := []byte("fake image data")
+	imageData := createTestJPEG(400, 300)
 	thumbnail, err := media.GenerateThumbnail(imageData, "image/jpeg")
 	require.NoError(t, err)
 
@@ -123,7 +127,7 @@ func TestMediaMessage_Compression(t *testing.T) {
 
 func TestMediaMessage_MessageFormat(t *testing.T) {
 	// Test complete message format
-	imageData := []byte("fake image data")
+	imageData := createTestJPEG(400, 300)
 	metadata := media.MediaMetadata{
 		Type: "image/jpeg",
 		Size: int64(len(imageData)),
@@ -144,7 +148,7 @@ func TestMediaMessage_MessageFormat(t *testing.T) {
 
 func TestMediaMessage_Serialization(t *testing.T) {
 	// Test message serialization/deserialization
-	originalData := []byte("test media data")
+	originalData := createTestJPEG(400, 300)
 	metadata := media.MediaMetadata{
 		Type: "image/jpeg",
 		Size: int64(len(originalData)),
@@ -168,4 +172,33 @@ func TestMediaMessage_Serialization(t *testing.T) {
 	assert.Equal(t, message.Metadata.Name, deserialized.Metadata.Name)
 	assert.Equal(t, message.Data, deserialized.Data)
 	assert.Equal(t, message.Thumbnail, deserialized.Thumbnail)
+}
+
+// Helper function to create test JPEG data
+func createTestJPEG(width, height int) []byte {
+	img := createTestImage(width, height)
+
+	var buf bytes.Buffer
+	err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 90})
+	if err != nil {
+		panic(err)
+	}
+
+	return buf.Bytes()
+}
+
+func createTestImage(width, height int) image.Image {
+	img := image.NewRGBA(image.Rect(0, 0, width, height))
+
+	// Fill with a gradient pattern
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			r := uint8((x * 255) / width)
+			g := uint8((y * 255) / height)
+			b := uint8(((x + y) * 255) / (width + height))
+			img.Set(x, y, color.RGBA{r, g, b, 255})
+		}
+	}
+
+	return img
 }

@@ -1,0 +1,254 @@
+package calls
+
+import (
+	"context"
+	"fmt"
+	"sync"
+	"time"
+
+	"github.com/libp2p/go-libp2p/core/host"
+)
+
+type DegradationConfig struct {
+	MaxParticipants   int
+	MinParticipants   int
+	FailureThreshold  int
+	RecoveryTimeout   time.Duration
+	GracefulDegrade   bool
+	FallbackMode      bool
+	QualityAdaptation bool
+}
+
+type DegradationStats struct {
+	FailedParticipants int
+	ActiveParticipants int
+	DegradationEvents  int
+	RecoveryEvents     int
+	FallbackModeActive bool
+	QualityLevel       string
+}
+
+type CallManagerWithDegradation struct {
+	host          host.Host
+	config        *DegradationConfig
+	sessions      map[string]*CallSession
+	stats         *DegradationStats
+	mutex         sync.RWMutex
+	failedPeers   map[string]time.Time // peerID -> failure time
+	recoveryQueue chan string          // peerID recovery queue
+}
+
+func NewCallManagerWithDegradation(h host.Host, config *DegradationConfig) *CallManagerWithDegradation {
+	manager := &CallManagerWithDegradation{
+		host:          h,
+		config:        config,
+		sessions:      make(map[string]*CallSession),
+		stats:         &DegradationStats{},
+		failedPeers:   make(map[string]time.Time),
+		recoveryQueue: make(chan string, 100),
+	}
+
+	// Start recovery monitoring
+	go manager.monitorRecovery()
+
+	return manager
+}
+
+func (m *CallManagerWithDegradation) InitiateGroupCall(ctx context.Context, groupID string, participants []string) (string, error) {
+	callID := generateDegradationCallID()
+
+	// Create call session with degradation support
+	session := &CallSession{
+		ID:           callID,
+		GroupID:      groupID,
+		participants: make(map[string]bool),
+		state:        StateInitiating,
+		Quality:      "high",
+		CreatedAt:    time.Now(),
+	}
+
+	// Add participants
+	for _, peerID := range participants {
+		session.participants[peerID] = true
+	}
+
+	m.mutex.Lock()
+	m.sessions[callID] = session
+	m.stats.ActiveParticipants = len(participants) + 1 // +1 for local participant
+	m.mutex.Unlock()
+
+	return callID, nil
+}
+
+func (m *CallManagerWithDegradation) SimulateParticipantFailure(ctx context.Context, callID string, peerID string) error {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	session, exists := m.sessions[callID]
+	if !exists {
+		return fmt.Errorf("call session not found: %s", callID)
+	}
+
+	// Mark participant as failed
+	session.participants[peerID] = false
+	m.failedPeers[peerID] = time.Now()
+	m.stats.FailedParticipants++
+
+	// Update active participants count
+	activeCount := 0
+	for _, active := range session.participants {
+		if active {
+			activeCount++
+		}
+	}
+	// Add 1 for local participant
+	m.stats.ActiveParticipants = activeCount + 1
+
+	// Check if graceful degradation should be applied
+	if m.config.GracefulDegrade && activeCount < len(session.participants) {
+		m.stats.DegradationEvents++
+		m.adaptCallQuality(session, activeCount)
+	}
+
+	// Check if fallback mode should be activated
+	if m.config.FallbackMode && m.stats.FailedParticipants >= m.config.FailureThreshold {
+		m.stats.FallbackModeActive = true
+	}
+
+	return nil
+}
+
+func (m *CallManagerWithDegradation) SimulateParticipantRecovery(ctx context.Context, callID string, peerID string) error {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	session, exists := m.sessions[callID]
+	if !exists {
+		return fmt.Errorf("call session not found: %s", callID)
+	}
+
+	// Mark participant as recovered
+	session.participants[peerID] = true
+	delete(m.failedPeers, peerID)
+	m.stats.RecoveryEvents++
+
+	// Update active participants count
+	activeCount := 0
+	for _, active := range session.participants {
+		if active {
+			activeCount++
+		}
+	}
+	// Add 1 for local participant
+	m.stats.ActiveParticipants = activeCount + 1
+
+	// Adapt quality based on recovery
+	if m.config.QualityAdaptation {
+		m.adaptCallQuality(session, activeCount)
+	}
+
+	// Check if fallback mode should be deactivated
+	if m.stats.FailedParticipants <= m.config.FailureThreshold/2 {
+		m.stats.FallbackModeActive = false
+	}
+
+	return nil
+}
+
+func (m *CallManagerWithDegradation) GetCallSession(callID string) *CallSession {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+	return m.sessions[callID]
+}
+
+func (m *CallManagerWithDegradation) GetDegradationStats() DegradationStats {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+	return *m.stats
+}
+
+func (m *CallManagerWithDegradation) adaptCallQuality(session *CallSession, activeCount int) {
+	if !m.config.QualityAdaptation {
+		return
+	}
+
+	// Determine quality based on active participants
+	totalParticipants := len(session.participants)
+	ratio := float64(activeCount) / float64(totalParticipants)
+
+	if ratio >= 0.8 {
+		session.Quality = "high"
+		m.stats.QualityLevel = "high"
+	} else if ratio >= 0.5 {
+		session.Quality = "medium"
+		m.stats.QualityLevel = "medium"
+	} else {
+		session.Quality = "low"
+		m.stats.QualityLevel = "low"
+	}
+}
+
+func (m *CallManagerWithDegradation) monitorRecovery() {
+	ticker := time.NewTicker(m.config.RecoveryTimeout)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			m.checkForRecovery()
+		case peerID := <-m.recoveryQueue:
+			m.processRecovery(peerID)
+		}
+	}
+}
+
+func (m *CallManagerWithDegradation) checkForRecovery() {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	now := time.Now()
+	for peerID, failureTime := range m.failedPeers {
+		if now.Sub(failureTime) > m.config.RecoveryTimeout {
+			// Add to recovery queue
+			select {
+			case m.recoveryQueue <- peerID:
+			default:
+				// Queue is full, skip this recovery
+			}
+		}
+	}
+}
+
+func (m *CallManagerWithDegradation) processRecovery(peerID string) {
+	// Find all sessions with this peer and mark as recovered
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	for _, session := range m.sessions {
+		if _, exists := session.participants[peerID]; exists {
+			session.participants[peerID] = true
+		}
+	}
+
+	// Update stats
+	delete(m.failedPeers, peerID)
+	m.stats.RecoveryEvents++
+
+	// Update active participants count
+	totalActive := 0
+	for _, session := range m.sessions {
+		activeCount := 0
+		for _, active := range session.participants {
+			if active {
+				activeCount++
+			}
+		}
+		totalActive += activeCount
+	}
+	m.stats.ActiveParticipants = totalActive
+}
+
+// Helper function to generate call ID for degradation
+func generateDegradationCallID() string {
+	return fmt.Sprintf("degradation_call_%d", time.Now().UnixNano())
+}

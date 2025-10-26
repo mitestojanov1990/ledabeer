@@ -32,7 +32,7 @@ func TestGroupChat_CreateGroup(t *testing.T) {
 	groupID := "test-group"
 	members := []string{"member1", "member2", "member3"}
 
-	err = gm.CreateGroup(groupID, members)
+	err = gm.CreateGroupLegacy(groupID, members)
 	require.NoError(t, err)
 
 	// Verify group was created
@@ -79,7 +79,7 @@ func TestGroupChat_SendGroupMessage(t *testing.T) {
 
 	// All members join the group
 	for i := 0; i < 3; i++ {
-		err := groupManagers[i].CreateGroup(groupID, memberIDs)
+		err := groupManagers[i].CreateGroupLegacy(groupID, memberIDs)
 		require.NoError(t, err)
 	}
 
@@ -88,7 +88,7 @@ func TestGroupChat_SendGroupMessage(t *testing.T) {
 
 	// Member 0 sends message to group
 	message := "Hello everyone!"
-	err := groupManagers[0].SendGroupMessage(groupID, message)
+	_, err := groupManagers[0].SendGroupMessage(ctx, groupID, []byte(message))
 	require.NoError(t, err)
 
 	// Wait for message propagation
@@ -139,7 +139,7 @@ func TestGroupChat_AddRemoveMember(t *testing.T) {
 
 	// First 3 members join the group
 	for i := 0; i < 3; i++ {
-		err := groupManagers[i].CreateGroup(groupID, initialMembers)
+		err := groupManagers[i].CreateGroupLegacy(groupID, initialMembers)
 		require.NoError(t, err)
 	}
 
@@ -152,7 +152,7 @@ func TestGroupChat_AddRemoveMember(t *testing.T) {
 	require.NoError(t, err)
 
 	// 4th member joins the group
-	err = groupManagers[3].CreateGroup(groupID, append(initialMembers, newMemberID))
+	err = groupManagers[3].CreateGroupLegacy(groupID, append(initialMembers, newMemberID))
 	require.NoError(t, err)
 
 	// Wait for member addition
@@ -216,7 +216,7 @@ func TestGroupChat_LeaveGroup(t *testing.T) {
 
 	// All members join the group
 	for i := 0; i < 3; i++ {
-		err := groupManagers[i].CreateGroup(groupID, memberIDs)
+		err := groupManagers[i].CreateGroupLegacy(groupID, memberIDs)
 		require.NoError(t, err)
 	}
 

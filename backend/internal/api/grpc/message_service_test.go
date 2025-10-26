@@ -55,8 +55,9 @@ func TestMessageService_SendGroupMessage(t *testing.T) {
 
 // Helper functions
 func setupTestMessageService(t *testing.T) *grpc.MessageService {
-	// Create a mock message handler
-	return grpc.NewMessageService(nil)
+	// Create a mock message handler and group manager
+	// For unit tests, we can pass nil since we're testing the service logic
+	return grpc.NewMessageService(nil, nil)
 }
 
 type mockServerStream struct{}

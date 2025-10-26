@@ -51,7 +51,7 @@ func TestGroupMessage_EncryptDecrypt(t *testing.T) {
 
 	// All members join the group
 	for i := 0; i < 3; i++ {
-		err := groupManagers[i].CreateGroup(groupID, memberIDs)
+		err := groupManagers[i].CreateGroupLegacy(groupID, memberIDs)
 		require.NoError(t, err)
 	}
 
@@ -102,7 +102,7 @@ func TestGroupMessage_NonMemberRejected(t *testing.T) {
 	groupID := "test-group"
 	memberIDs := []string{members[0].ID().String()}
 
-	err = groupManagers[0].CreateGroup(groupID, memberIDs)
+	err = groupManagers[0].CreateGroupLegacy(groupID, memberIDs)
 	require.NoError(t, err)
 
 	// Member 0 sends encrypted message
@@ -152,7 +152,7 @@ func TestGroupMessage_ForwardSecrecy(t *testing.T) {
 
 	// All members join the group
 	for i := 0; i < 3; i++ {
-		err := groupManagers[i].CreateGroup(groupID, memberIDs)
+		err := groupManagers[i].CreateGroupLegacy(groupID, memberIDs)
 		require.NoError(t, err)
 	}
 

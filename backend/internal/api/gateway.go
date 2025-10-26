@@ -107,13 +107,18 @@ func (g *Gateway) startHTTP() error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", g.wsServer.HandleConnection)
 
+	// Create listener first to get actual address
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", g.config.HTTPPort))
+	if err != nil {
+		return err
+	}
+
 	server := &http.Server{
-		Addr:    fmt.Sprintf(":%d", g.config.HTTPPort),
 		Handler: mux,
 	}
 
 	g.httpServer = server
-	g.httpAddr = fmt.Sprintf("localhost:%d", g.config.HTTPPort)
+	g.httpAddr = lis.Addr().String()
 
-	return server.ListenAndServe()
+	return server.Serve(lis)
 }

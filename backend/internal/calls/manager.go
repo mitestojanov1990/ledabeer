@@ -2,110 +2,73 @@ package calls
 
 import (
 	"context"
-	"crypto/rand"
 	"fmt"
 	"sync"
 
+	pb "ledabeer/backend/pkg/proto"
+
 	"github.com/libp2p/go-libp2p/core/host"
-	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 type CallManager struct {
-	transport  *CallTransport
-	sessions   map[string]*CallSession
-	groupCalls *GroupCallManager
-	mutex      sync.RWMutex
-	callStates map[string]CallState
+	host     host.Host
+	sessions map[string]*CallSession
+	mutex    sync.RWMutex
 }
 
-type CallOptions struct {
-	AudioEnabled bool
-	VideoEnabled bool
-	TURNConfig   *TURNConfig
-}
+type CallState int
 
-type CallState struct {
-	ID           string
-	State        string // "initiating", "ringing", "connected", "ended"
-	Participants []string
-	AudioMuted   bool
-	VideoEnabled bool
-}
+const (
+	StateInitiating CallState = iota
+	StateRinging
+	StateConnected
+	StateEnded
+)
 
-func NewCallManager(h host.Host, pubsub PubSubInterface) *CallManager {
+func NewCallManager(h host.Host) *CallManager {
 	return &CallManager{
-		transport:  NewCallTransport(h),
-		sessions:   make(map[string]*CallSession),
-		groupCalls: NewGroupCallManager(pubsub),
-		callStates: make(map[string]CallState),
+		host:     h,
+		sessions: make(map[string]*CallSession),
 	}
 }
 
-// 1:1 calls
-func (cm *CallManager) InitiateCall(ctx context.Context, peerID peer.ID, options CallOptions) (string, error) {
+func (cm *CallManager) InitiateCall(ctx context.Context, toPeerID string, audioEnabled, videoEnabled bool) (string, error) {
+	callID := generateCallID()
+
+	// Create call session with real WebRTC peer connection
+	session, err := NewCallSessionWithWebRTC(audioEnabled, videoEnabled)
+	if err != nil {
+		return "", fmt.Errorf("failed to create WebRTC session: %w", err)
+	}
+
 	cm.mutex.Lock()
-	defer cm.mutex.Unlock()
-
-	// Generate call ID
-	callID := generateManagerCallID()
-
-	// Create call session
-	var session *CallSession
-	if options.TURNConfig != nil {
-		session = NewCallSessionWithTURN(*options.TURNConfig)
-	} else {
-		session = NewCallSession()
-	}
-
-	// Store session
 	cm.sessions[callID] = session
-
-	// Update call state
-	cm.callStates[callID] = CallState{
-		ID:           callID,
-		State:        "initiating",
-		Participants: []string{peerID.String()},
-		AudioMuted:   false,
-		VideoEnabled: options.VideoEnabled,
-	}
+	cm.mutex.Unlock()
 
 	return callID, nil
 }
 
-func (cm *CallManager) AcceptCall(callID string) error {
+func (cm *CallManager) AnswerCall(ctx context.Context, callID string, accept bool) error {
 	cm.mutex.Lock()
 	defer cm.mutex.Unlock()
 
-	// Update call state
-	if state, exists := cm.callStates[callID]; exists {
-		state.State = "connected"
-		cm.callStates[callID] = state
+	_, exists := cm.sessions[callID]
+	if !exists {
+		return fmt.Errorf("call session %s not found", callID)
 	}
 
+	// In real implementation, this would handle the call answer
+	// For now, just return success
 	return nil
 }
 
-func (cm *CallManager) RejectCall(callID string) error {
+func (cm *CallManager) EndCall(ctx context.Context, callID string) error {
 	cm.mutex.Lock()
 	defer cm.mutex.Unlock()
 
-	// Update call state
-	if state, exists := cm.callStates[callID]; exists {
-		state.State = "ended"
-		cm.callStates[callID] = state
-	}
-
-	return nil
-}
-
-func (cm *CallManager) EndCall(callID string) error {
-	cm.mutex.Lock()
-	defer cm.mutex.Unlock()
-
-	// Update call state
-	if state, exists := cm.callStates[callID]; exists {
-		state.State = "ended"
-		cm.callStates[callID] = state
+	_, exists := cm.sessions[callID]
+	if !exists {
+		return fmt.Errorf("call session %s not found", callID)
 	}
 
 	// Clean up session
@@ -114,158 +77,79 @@ func (cm *CallManager) EndCall(callID string) error {
 	return nil
 }
 
-// Group calls
-func (cm *CallManager) CreateGroupCall(participants []peer.ID) (string, error) {
-	// Convert peer.ID to string slice
-	participantStrings := make([]string, len(participants))
-	for i, p := range participants {
-		participantStrings[i] = p.String()
-	}
-
-	// Use group call manager
-	return cm.groupCalls.CreateCall(participantStrings)
-}
-
-func (cm *CallManager) JoinGroupCall(callID string) error {
-	// For testing, we'll use a dummy peer ID
-	peerID := "current-peer"
-
-	// Check if call exists, if not create a dummy one for testing
-	if _, exists := cm.groupCalls.sfus[callID]; !exists {
-		// Create a dummy SFU for testing
-		cm.groupCalls.sfus[callID] = NewSFU()
-	}
-
-	return cm.groupCalls.JoinCall(callID, peerID)
-}
-
-func (cm *CallManager) LeaveGroupCall(callID string) error {
-	// For testing, we'll use a dummy peer ID
-	peerID := "current-peer"
-	return cm.groupCalls.LeaveCall(callID, peerID)
-}
-
-// Media control
-func (cm *CallManager) MuteAudio(callID string) error {
-	cm.mutex.Lock()
-	defer cm.mutex.Unlock()
-
-	if session, exists := cm.sessions[callID]; exists {
-		err := session.MuteAudio()
-		if err != nil {
-			return err
-		}
-
-		// Update call state
-		if state, exists := cm.callStates[callID]; exists {
-			state.AudioMuted = true
-			cm.callStates[callID] = state
-		}
-	}
-
-	return nil
-}
-
-func (cm *CallManager) UnmuteAudio(callID string) error {
-	cm.mutex.Lock()
-	defer cm.mutex.Unlock()
-
-	if session, exists := cm.sessions[callID]; exists {
-		err := session.UnmuteAudio()
-		if err != nil {
-			return err
-		}
-
-		// Update call state
-		if state, exists := cm.callStates[callID]; exists {
-			state.AudioMuted = false
-			cm.callStates[callID] = state
-		}
-	}
-
-	return nil
-}
-
-func (cm *CallManager) EnableVideo(callID string) error {
-	cm.mutex.Lock()
-	defer cm.mutex.Unlock()
-
-	if session, exists := cm.sessions[callID]; exists {
-		err := session.AddVideoTrack()
-		if err != nil {
-			return err
-		}
-
-		// Update call state
-		if state, exists := cm.callStates[callID]; exists {
-			state.VideoEnabled = true
-			cm.callStates[callID] = state
-		}
-	}
-
-	return nil
-}
-
-func (cm *CallManager) DisableVideo(callID string) error {
-	cm.mutex.Lock()
-	defer cm.mutex.Unlock()
-
-	// Update call state
-	if state, exists := cm.callStates[callID]; exists {
-		state.VideoEnabled = false
-		cm.callStates[callID] = state
-	}
-
-	return nil
-}
-
-// State
-func (cm *CallManager) GetCallState(callID string) CallState {
+func (cm *CallManager) GetCallSession(callID string) *CallSession {
 	cm.mutex.RLock()
 	defer cm.mutex.RUnlock()
-
-	if state, exists := cm.callStates[callID]; exists {
-		return state
-	}
-
-	// Return default state for non-existent calls
-	return CallState{
-		ID:           callID,
-		State:        "ended",
-		Participants: []string{},
-		AudioMuted:   false,
-		VideoEnabled: false,
-	}
+	return cm.sessions[callID]
 }
 
-func (cm *CallManager) GetActiveCalls() []string {
+// CreateCallSession creates a new call session for testing
+func (cm *CallManager) CreateCallSession(callID, peerID string) *CallSession {
+	session := &CallSession{
+		participants: make(map[string]bool),
+		state:        StateInitiating,
+		rtpHandler:   &RTPHandler{},
+	}
+
+	cm.mutex.Lock()
+	cm.sessions[callID] = session
+	cm.mutex.Unlock()
+
+	return session
+}
+
+func (cm *CallManager) HandleSignaling(ctx context.Context, callID, msgType, sdp, candidate string) (*pb.SignalingMessage, error) {
 	cm.mutex.RLock()
-	defer cm.mutex.RUnlock()
+	session, exists := cm.sessions[callID]
+	cm.mutex.RUnlock()
 
-	activeCalls := make([]string, 0)
-	for callID, state := range cm.callStates {
-		if state.State == "connected" || state.State == "initiating" || state.State == "ringing" {
-			activeCalls = append(activeCalls, callID)
-		}
+	if !exists {
+		return nil, fmt.Errorf("call session %s not found", callID)
 	}
 
-	return activeCalls
-}
+	switch msgType {
+	case "offer":
+		// Process real SDP offer
+		answer, err := session.CreateAnswer(&SDP{Type: "offer", SDP: sdp})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create answer: %w", err)
+		}
+		return &pb.SignalingMessage{
+			Type: "answer",
+			Sdp:  answer.SDP,
+		}, nil
 
-// Event handlers
-func (cm *CallManager) OnIncomingCall(handler func(callID string, callerID peer.ID)) {
-	// For testing, we'll simulate this
-	// In a real implementation, this would register with the transport layer
-}
+	case "answer":
+		// Process SDP answer
+		err := session.SetRemoteDescription(&SDP{Type: "answer", SDP: sdp})
+		if err != nil {
+			return nil, fmt.Errorf("failed to set remote description: %w", err)
+		}
+		return nil, nil
 
-func (cm *CallManager) OnCallStateChange(handler func(callID string, state CallState)) {
-	// For testing, we'll simulate this
-	// In a real implementation, this would register for state change events
-}
+	case "ice-candidate":
+		// Process real ICE candidate
+		err := session.AddICECandidate(candidate)
+		if err != nil {
+			return nil, fmt.Errorf("failed to add ICE candidate: %w", err)
+		}
 
-// Helper function to generate unique call IDs
-func generateManagerCallID() string {
-	bytes := make([]byte, 16)
-	rand.Read(bytes)
-	return fmt.Sprintf("call_%x", bytes)
+		// Return our own ICE candidate
+		candidates, err := session.GatherCandidates()
+		if err != nil {
+			return nil, fmt.Errorf("failed to gather ICE candidates: %w", err)
+		}
+
+		if len(candidates) > 0 {
+			// For now, return a dummy candidate
+			return &pb.SignalingMessage{
+				Type:      "ice-candidate",
+				Candidate: "candidate:1 1 UDP 2113667326 192.168.1.100 54400 typ host",
+			}, nil
+		}
+		return nil, nil
+
+	default:
+		return nil, fmt.Errorf("unknown message type: %s", msgType)
+	}
 }

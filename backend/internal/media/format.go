@@ -6,9 +6,14 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/jpeg"
+	"image/png"
 	"io"
 	"path/filepath"
 	"strings"
+
+	"github.com/nfnt/resize"
 )
 
 // MediaMessage represents a complete media message with metadata and data
@@ -39,16 +44,36 @@ func ExtractMetadata(data []byte, filename string) (MediaMetadata, error) {
 
 // GenerateThumbnail generates a thumbnail for image files
 func GenerateThumbnail(data []byte, mimeType string) ([]byte, error) {
-	// For now, return a simple placeholder thumbnail
-	// In a real implementation, use image processing libraries
 	if !strings.HasPrefix(mimeType, "image/") {
 		return nil, fmt.Errorf("thumbnail generation only supported for images")
 	}
 
-	// Create a simple placeholder thumbnail that's smaller than original
-	// This is a minimal implementation for testing
-	thumbnail := []byte("thumb")
-	return thumbnail, nil
+	// Decode image
+	img, format, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode image: %w", err)
+	}
+
+	// Resize to thumbnail dimensions (max 200x200, preserving aspect ratio)
+	thumbnail := resize.Thumbnail(200, 200, img, resize.Lanczos3)
+
+	// Encode back to original format
+	var buf bytes.Buffer
+	switch format {
+	case "jpeg", "jpg":
+		err = jpeg.Encode(&buf, thumbnail, &jpeg.Options{Quality: 80})
+	case "png":
+		err = png.Encode(&buf, thumbnail)
+	default:
+		// Default to JPEG for other formats
+		err = jpeg.Encode(&buf, thumbnail, &jpeg.Options{Quality: 80})
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode thumbnail: %w", err)
+	}
+
+	return buf.Bytes(), nil
 }
 
 // ValidateMimeType validates if a MIME type is supported

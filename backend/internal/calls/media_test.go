@@ -12,15 +12,15 @@ import (
 
 func TestMedia_AddAudioTrack(t *testing.T) {
 	session := calls.NewCallSession()
-	err := session.AddAudioTrack()
-	require.NoError(t, err)
+	track := session.AddAudioTrack()
+	require.NotNil(t, track)
 	assert.True(t, session.HasAudioTrack())
 }
 
 func TestMedia_AddVideoTrack(t *testing.T) {
 	session := calls.NewCallSession()
-	err := session.AddVideoTrack()
-	require.NoError(t, err)
+	track := session.AddVideoTrack()
+	require.NotNil(t, track)
 	assert.True(t, session.HasVideoTrack())
 }
 
