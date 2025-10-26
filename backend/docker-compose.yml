@@ -1,0 +1,84 @@
+version: "3.8"
+
+services:
+  # Bootstrap node
+  bootstrap:
+    build: .
+    container_name: ledabeer-bootstrap
+    ports:
+      - "4001:4001"
+    environment:
+      - NODE_ROLE=bootstrap
+    networks:
+      - ledabeer-network
+    command: ["node", "--bootstrap", "--listen", "/ip4/0.0.0.0/tcp/4001"]
+
+  # Alice node
+  alice:
+    build: .
+    container_name: ledabeer-alice
+    ports:
+      - "4002:4002"
+    environment:
+      - NODE_ROLE=alice
+      - BOOTSTRAP_PEER=/dns4/bootstrap/tcp/4001/p2p/12D3KooWBootstrap
+    networks:
+      - ledabeer-network
+    depends_on:
+      - bootstrap
+    command:
+      [
+        "node",
+        "--listen",
+        "/ip4/0.0.0.0/tcp/4002",
+        "--bootstrap-peer",
+        "/dns4/bootstrap/tcp/4001/p2p/12D3KooWBootstrap",
+      ]
+
+  # Bob node
+  bob:
+    build: .
+    container_name: ledabeer-bob
+    ports:
+      - "4003:4003"
+    environment:
+      - NODE_ROLE=bob
+      - BOOTSTRAP_PEER=/dns4/bootstrap/tcp/4001/p2p/12D3KooWBootstrap
+    networks:
+      - ledabeer-network
+    depends_on:
+      - bootstrap
+    command:
+      [
+        "node",
+        "--listen",
+        "/ip4/0.0.0.0/tcp/4003",
+        "--bootstrap-peer",
+        "/dns4/bootstrap/tcp/4001/p2p/12D3KooWBootstrap",
+      ]
+
+  # Charlie node
+  charlie:
+    build: .
+    container_name: ledabeer-charlie
+    ports:
+      - "4004:4004"
+    environment:
+      - NODE_ROLE=charlie
+      - BOOTSTRAP_PEER=/dns4/bootstrap/tcp/4001/p2p/12D3KooWBootstrap
+    networks:
+      - ledabeer-network
+    depends_on:
+      - bootstrap
+    command:
+      [
+        "node",
+        "--listen",
+        "/ip4/0.0.0.0/tcp/4004",
+        "--bootstrap-peer",
+        "/dns4/bootstrap/tcp/4001/p2p/12D3KooWBootstrap",
+      ]
+
+networks:
+  ledabeer-network:
+    driver: bridge

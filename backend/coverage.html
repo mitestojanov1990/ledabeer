@@ -1,0 +1,518 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>crypto: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">ledabeer/backend/internal/crypto/identity.go (84.6%)</option>
+				
+				<option value="file1">ledabeer/backend/internal/crypto/ratchet.go (80.8%)</option>
+				
+				<option value="file2">ledabeer/backend/internal/crypto/x3dh.go (95.8%)</option>
+				
+				<option value="file3">ledabeer/backend/internal/network/host.go (100.0%)</option>
+				
+				<option value="file4">ledabeer/backend/internal/network/stream.go (80.0%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package crypto
+
+import (
+        "crypto/ed25519"
+        "crypto/rand"
+        "errors"
+)
+
+// IdentityKeyPair represents an Ed25519 key pair for peer identity
+type IdentityKeyPair struct {
+        PublicKey  ed25519.PublicKey
+        PrivateKey ed25519.PrivateKey
+}
+
+// KeyGenerator interface for generating identity keys
+type KeyGenerator interface {
+        GenerateIdentityKeyPair() (*IdentityKeyPair, error)
+}
+
+// Ed25519KeyGenerator implements KeyGenerator using Ed25519
+type Ed25519KeyGenerator struct{}
+
+// NewEd25519KeyGenerator creates a new Ed25519 key generator
+func NewEd25519KeyGenerator() *Ed25519KeyGenerator <span class="cov8" title="1">{
+        return &amp;Ed25519KeyGenerator{}
+}</span>
+
+// GenerateIdentityKeyPair creates a new Ed25519 identity key pair
+func (g *Ed25519KeyGenerator) GenerateIdentityKeyPair() (*IdentityKeyPair, error) <span class="cov8" title="1">{
+        publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+
+        <span class="cov8" title="1">return &amp;IdentityKeyPair{
+                PublicKey:  publicKey,
+                PrivateKey: privateKey,
+        }, nil</span>
+}
+
+// GenerateIdentityKeyPair creates a new Ed25519 identity key pair (convenience function)
+func GenerateIdentityKeyPair() (*IdentityKeyPair, error) <span class="cov8" title="1">{
+        generator := NewEd25519KeyGenerator()
+        return generator.GenerateIdentityKeyPair()
+}</span>
+
+// Serialize returns the private key bytes for storage
+func (k *IdentityKeyPair) Serialize() []byte <span class="cov8" title="1">{
+        return []byte(k.PrivateKey)
+}</span>
+
+// DeserializeIdentityKeyPair reconstructs a key pair from serialized private key
+func DeserializeIdentityKeyPair(data []byte) (*IdentityKeyPair, error) <span class="cov8" title="1">{
+        if len(data) != ed25519.PrivateKeySize </span><span class="cov0" title="0">{
+                return nil, errors.New("invalid private key size")
+        }</span>
+
+        <span class="cov8" title="1">privateKey := ed25519.PrivateKey(data)
+        publicKey := privateKey.Public().(ed25519.PublicKey)
+
+        return &amp;IdentityKeyPair{
+                PublicKey:  publicKey,
+                PrivateKey: privateKey,
+        }, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file1" style="display: none">package crypto
+
+import (
+        "crypto/aes"
+        "crypto/cipher"
+        "crypto/hmac"
+        "crypto/rand"
+        "crypto/sha256"
+        "encoding/binary"
+        "errors"
+        "io"
+)
+
+// DoubleRatchet implements a simplified Double Ratchet algorithm
+type DoubleRatchet struct {
+        rootKey    []byte
+        chainKey   []byte
+        messageNum uint32
+        isSender   bool
+}
+
+// NewDoubleRatchet creates a new Double Ratchet with a shared secret
+func NewDoubleRatchet(sharedSecret []byte, isSender bool) *DoubleRatchet <span class="cov8" title="1">{
+        return &amp;DoubleRatchet{
+                rootKey:    sharedSecret,
+                chainKey:   deriveKey(sharedSecret, []byte("chain")),
+                messageNum: 0,
+                isSender:   isSender,
+        }
+}</span>
+
+// Encrypt encrypts a message using the Double Ratchet
+func (r *DoubleRatchet) Encrypt(plaintext []byte) ([]byte, error) <span class="cov8" title="1">{
+        // Derive message key from chain key
+        messageKey := r.deriveMessageKey()
+
+        // Encrypt the plaintext
+        ciphertext, err := encryptAESGCM(messageKey, plaintext)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+
+        // Prepend message number
+        <span class="cov8" title="1">result := make([]byte, 4+len(ciphertext))
+        binary.BigEndian.PutUint32(result[:4], r.messageNum)
+        copy(result[4:], ciphertext)
+
+        // Advance the ratchet
+        r.advanceChainKey()
+        r.messageNum++
+
+        return result, nil</span>
+}
+
+// Decrypt decrypts a message using the Double Ratchet
+func (r *DoubleRatchet) Decrypt(ciphertext []byte) ([]byte, error) <span class="cov8" title="1">{
+        if len(ciphertext) &lt; 4 </span><span class="cov0" title="0">{
+                return nil, errors.New("ciphertext too short")
+        }</span>
+
+        // Extract message number
+        <span class="cov8" title="1">messageNum := binary.BigEndian.Uint32(ciphertext[:4])
+
+        // Check if this is the expected message number (simplified - no out-of-order handling)
+        if messageNum != r.messageNum </span><span class="cov8" title="1">{
+                return nil, errors.New("unexpected message number - forward secrecy violated")
+        }</span>
+
+        // Derive message key from chain key
+        <span class="cov8" title="1">messageKey := r.deriveMessageKey()
+
+        // Decrypt the ciphertext
+        plaintext, err := decryptAESGCM(messageKey, ciphertext[4:])
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+
+        // Advance the ratchet
+        <span class="cov8" title="1">r.advanceChainKey()
+        r.messageNum++
+
+        return plaintext, nil</span>
+}
+
+// deriveMessageKey derives a message key from the current chain key
+func (r *DoubleRatchet) deriveMessageKey() []byte <span class="cov8" title="1">{
+        return deriveKey(r.chainKey, []byte("message"))
+}</span>
+
+// advanceChainKey advances the chain key (KDF ratchet step)
+func (r *DoubleRatchet) advanceChainKey() <span class="cov8" title="1">{
+        r.chainKey = deriveKey(r.chainKey, []byte("advance"))
+}</span>
+
+// deriveKey derives a key using HMAC-SHA256
+func deriveKey(key []byte, info []byte) []byte <span class="cov8" title="1">{
+        h := hmac.New(sha256.New, key)
+        h.Write(info)
+        return h.Sum(nil)
+}</span>
+
+// encryptAESGCM encrypts data using AES-256-GCM
+func encryptAESGCM(key []byte, plaintext []byte) ([]byte, error) <span class="cov8" title="1">{
+        block, err := aes.NewCipher(key)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+
+        <span class="cov8" title="1">gcm, err := cipher.NewGCM(block)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+
+        <span class="cov8" title="1">nonce := make([]byte, gcm.NonceSize())
+        if _, err := io.ReadFull(rand.Reader, nonce); err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+
+        <span class="cov8" title="1">ciphertext := gcm.Seal(nonce, nonce, plaintext, nil)
+        return ciphertext, nil</span>
+}
+
+// decryptAESGCM decrypts data using AES-256-GCM
+func decryptAESGCM(key []byte, ciphertext []byte) ([]byte, error) <span class="cov8" title="1">{
+        block, err := aes.NewCipher(key)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+
+        <span class="cov8" title="1">gcm, err := cipher.NewGCM(block)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+
+        <span class="cov8" title="1">if len(ciphertext) &lt; gcm.NonceSize() </span><span class="cov0" title="0">{
+                return nil, errors.New("ciphertext too short")
+        }</span>
+
+        <span class="cov8" title="1">nonce, ciphertext := ciphertext[:gcm.NonceSize()], ciphertext[gcm.NonceSize():]
+        plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+
+        <span class="cov8" title="1">return plaintext, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file2" style="display: none">package crypto
+
+import (
+        "crypto/ed25519"
+        "crypto/rand"
+        "errors"
+
+        "golang.org/x/crypto/sha3"
+)
+
+// X3DHSession represents a session for X3DH key exchange
+type X3DHSession struct {
+        identityKey     *IdentityKeyPair
+        ephemeralKey    *IdentityKeyPair
+        prekey          *IdentityKeyPair
+        prekeySignature []byte
+        sharedSecret    []byte
+        peerBundle      *PrekeyBundle // Store peer's bundle for receiver
+}
+
+// PrekeyBundle contains the public keys for X3DH
+type PrekeyBundle struct {
+        IdentityKey     ed25519.PublicKey
+        EphemeralKey    ed25519.PublicKey
+        Prekey          ed25519.PublicKey
+        PrekeySignature []byte
+}
+
+// NewX3DHSession creates a new X3DH session with generated keys
+func NewX3DHSession() *X3DHSession <span class="cov8" title="1">{
+        identityKey, _ := GenerateIdentityKeyPair()
+        ephemeralKey, _ := GenerateIdentityKeyPair()
+        prekey, _ := GenerateIdentityKeyPair()
+
+        signature := make([]byte, 64)
+        rand.Read(signature)
+
+        return &amp;X3DHSession{
+                identityKey:     identityKey,
+                ephemeralKey:    ephemeralKey,
+                prekey:          prekey,
+                prekeySignature: signature,
+        }
+}</span>
+
+// GeneratePrekeyBundle creates a prekey bundle for this session
+func (s *X3DHSession) GeneratePrekeyBundle() *PrekeyBundle <span class="cov8" title="1">{
+        return &amp;PrekeyBundle{
+                IdentityKey:     s.identityKey.PublicKey,
+                EphemeralKey:    s.ephemeralKey.PublicKey,
+                Prekey:          s.prekey.PublicKey,
+                PrekeySignature: s.prekeySignature,
+        }
+}</span>
+
+// InitiateKeyExchange performs X3DH key exchange as initiator
+func (s *X3DHSession) InitiateKeyExchange(bundle *PrekeyBundle) ([]byte, []byte, error) <span class="cov8" title="1">{
+        if bundle == nil || len(bundle.IdentityKey) == 0 </span><span class="cov8" title="1">{
+                return nil, nil, errors.New("invalid prekey bundle")
+        }</span>
+
+        // Derive shared secret
+        <span class="cov8" title="1">sharedSecret := s.deriveSharedSecret(bundle, s.ephemeralKey.PublicKey)
+        s.sharedSecret = sharedSecret
+
+        // Include our ephemeral key in the initial message so receiver can derive same secret
+        initialMessage := s.ephemeralKey.PublicKey
+
+        return sharedSecret, initialMessage, nil</span>
+}
+
+// ProcessKeyExchange processes the key exchange as receiver
+func (s *X3DHSession) ProcessKeyExchange(initialMessage []byte) ([]byte, error) <span class="cov8" title="1">{
+        if len(initialMessage) != ed25519.PublicKeySize </span><span class="cov0" title="0">{
+                return nil, errors.New("invalid initial message")
+        }</span>
+
+        // Extract initiator's ephemeral key from message
+        <span class="cov8" title="1">initiatorEphemeralKey := ed25519.PublicKey(initialMessage)
+
+        // Derive same shared secret using our bundle and initiator's ephemeral key
+        sharedSecret := s.deriveSharedSecret(s.GeneratePrekeyBundle(), initiatorEphemeralKey)
+        s.sharedSecret = sharedSecret
+
+        return sharedSecret, nil</span>
+}
+
+// deriveSharedSecret derives a shared secret deterministically
+func (s *X3DHSession) deriveSharedSecret(receiverBundle *PrekeyBundle, initiatorEphemeral ed25519.PublicKey) []byte <span class="cov8" title="1">{
+        // Both parties use the same inputs in the same order
+        hasher := sha3.New256()
+        hasher.Write(receiverBundle.IdentityKey) // Receiver's identity
+        hasher.Write(receiverBundle.Prekey)      // Receiver's prekey
+        hasher.Write(initiatorEphemeral)         // Initiator's ephemeral
+
+        return hasher.Sum(nil)
+}</span>
+</pre>
+		
+		<pre class="file" id="file3" style="display: none">package network
+
+import (
+        "context"
+
+        "github.com/libp2p/go-libp2p"
+        "github.com/libp2p/go-libp2p/core/host"
+)
+
+// Config holds configuration for a libp2p host
+type Config struct {
+        ListenAddrs []string
+}
+
+// NewHost creates a new libp2p host with secure transports
+func NewHost(ctx context.Context, cfg *Config) (host.Host, error) <span class="cov8" title="1">{
+        opts := []libp2p.Option{
+                libp2p.ListenAddrStrings(cfg.ListenAddrs...),
+                // Libp2p will automatically use Noise and TLS for secure connections
+        }
+
+        return libp2p.New(opts...)
+}</span>
+</pre>
+		
+		<pre class="file" id="file4" style="display: none">package network
+
+import (
+        "bufio"
+        "encoding/binary"
+        "io"
+
+        "github.com/libp2p/go-libp2p/core/network"
+)
+
+// StreamHandler handles incoming streams
+type StreamHandler struct {
+        handler func([]byte) error
+}
+
+// NewStreamHandler creates a new stream handler
+func NewStreamHandler(handler func([]byte) error) *StreamHandler <span class="cov8" title="1">{
+        return &amp;StreamHandler{
+                handler: handler,
+        }
+}</span>
+
+// Handle processes an incoming stream
+func (h *StreamHandler) Handle(stream network.Stream) <span class="cov8" title="1">{
+        defer stream.Close()
+
+        // Read message
+        data, err := ReadMessage(stream)
+        if err != nil </span><span class="cov0" title="0">{
+                return
+        }</span>
+
+        // Process message
+        <span class="cov8" title="1">h.handler(data)</span>
+}
+
+// WriteMessage writes a length-prefixed message to a stream
+func WriteMessage(stream network.Stream, data []byte) error <span class="cov8" title="1">{
+        // Write length prefix (4 bytes)
+        length := uint32(len(data))
+        if err := binary.Write(stream, binary.BigEndian, length); err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+
+        // Write data
+        <span class="cov8" title="1">_, err := stream.Write(data)
+        return err</span>
+}
+
+// ReadMessage reads a length-prefixed message from a stream
+func ReadMessage(stream network.Stream) ([]byte, error) <span class="cov8" title="1">{
+        reader := bufio.NewReader(stream)
+
+        // Read length prefix (4 bytes)
+        var length uint32
+        if err := binary.Read(reader, binary.BigEndian, &amp;length); err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+
+        // Read data
+        <span class="cov8" title="1">data := make([]byte, length)
+        _, err := io.ReadFull(reader, data)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+
+        <span class="cov8" title="1">return data, nil</span>
+}
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>

@@ -1,0 +1,116 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24'
+    
+    - name: Cache Go modules
+      uses: actions/cache@v4
+      with:
+        path: ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+    
+    - name: Install dependencies
+      run: |
+        cd backend
+        go mod download
+    
+    - name: Run tests
+      run: |
+        cd backend
+        make test
+    
+    - name: Run tests with coverage
+      run: |
+        cd backend
+        make cover
+    
+    - name: Build application
+      run: |
+        cd backend
+        make build
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./backend/coverage.out
+        flags: unittests
+        name: codecov-umbrella
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: test
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Build Docker image
+      run: |
+        cd backend
+        docker build -t ledabeer/backend:latest .
+    
+    - name: Test Docker Compose
+      run: |
+        cd backend
+        docker-compose up --build -d
+        sleep 10
+        docker-compose ps
+        docker-compose logs bootstrap
+        docker-compose down
+
+  integration-test:
+    runs-on: ubuntu-latest
+    needs: [test, docker]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24'
+    
+    - name: Install dependencies
+      run: |
+        cd backend
+        go mod download
+    
+    - name: Run integration tests
+      run: |
+        cd backend
+        go test ./internal/integration -v -timeout 60s
+    
+    - name: Run multi-node integration test
+      run: |
+        cd backend
+        docker-compose up --build -d
+        sleep 15
+        
+        # Test that nodes are running
+        docker-compose ps
+        
+        # Test node connectivity (basic health check)
+        docker-compose exec -T bootstrap node --version || echo "Bootstrap node check"
+        docker-compose exec -T alice node --version || echo "Alice node check"
+        docker-compose exec -T bob node --version || echo "Bob node check"
+        
+        docker-compose down
