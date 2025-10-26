@@ -135,6 +135,22 @@ func (n *IPFSNode) IsPinned(ctx context.Context, cid string) bool {
 	return n.pinned[cid]
 }
 
+func (n *IPFSNode) Remove(ctx context.Context, cid string) error {
+	n.mutex.Lock()
+	defer n.mutex.Unlock()
+
+	// Check if content exists
+	if _, exists := n.content[cid]; !exists {
+		return fmt.Errorf("content not found: %s", cid)
+	}
+
+	// Remove from storage
+	delete(n.content, cid)
+	delete(n.pinned, cid)
+
+	return nil
+}
+
 // Helper function to generate mock peer IDs for testing
 func generateMockPeerID() peer.ID {
 	bytes := make([]byte, 32)

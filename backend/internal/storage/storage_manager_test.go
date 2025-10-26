@@ -79,12 +79,10 @@ func TestStorageManager_StorageStats(t *testing.T) {
 	manager.StoreContent(ctx, data2)
 
 	// Get storage statistics
-	stats, err := manager.GetStorageStats(ctx)
-	require.NoError(t, err)
+	stats := manager.GetStorageStats(ctx)
 
-	assert.Greater(t, stats.TotalSize, int64(0))
-	assert.Greater(t, stats.ItemCount, 0)
-	assert.Greater(t, stats.PinnedCount, 0)
+	assert.Greater(t, stats.UsedBytes, int64(0))
+	assert.Greater(t, stats.ContentCount, 0)
 }
 
 func TestStorageManager_ContentExpiration(t *testing.T) {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"ledabeer/backend/internal/messaging"
 	"ledabeer/backend/internal/storage"
 )
 
@@ -18,6 +19,16 @@ type MediaInfo struct {
 	MimeType  string
 	Size      int64
 	Filename  string
+	Timestamp int64
+}
+
+type MediaMessageInfo struct {
+	ID        string
+	From      string
+	CID       string
+	MimeType  string
+	Filename  string
+	Size      int64
 	Timestamp int64
 }
 
@@ -137,3 +148,102 @@ func detectMimeType(data []byte) string {
 	// Default to binary
 	return "application/octet-stream"
 }
+
+// Media Message Methods
+
+func (m *MediaHandler) SendMediaMessage(ctx context.Context, msgHandler *messaging.MessageHandler, toPeerID, cid, mimeType, filename string) (string, error) {
+	// Create media message content
+	mediaContent := fmt.Sprintf("MEDIA:%s:%s:%s", cid, mimeType, filename)
+
+	// Send via messaging layer
+	messageID, err := msgHandler.SendMessage(ctx, toPeerID, []byte(mediaContent))
+	if err != nil {
+		return "", fmt.Errorf("failed to send media message: %w", err)
+	}
+
+	return messageID, nil
+}
+
+func (m *MediaHandler) SendGroupMediaMessage(ctx context.Context, msgHandler *messaging.MessageHandler, groupID, cid, mimeType, filename string) (string, error) {
+	// Create group media message content
+	mediaContent := fmt.Sprintf("GROUP_MEDIA:%s:%s:%s:%s", groupID, cid, mimeType, filename)
+
+	// Send via messaging layer (simplified - in real implementation would use group manager)
+	messageID, err := msgHandler.SendMessage(ctx, groupID, []byte(mediaContent))
+	if err != nil {
+		return "", fmt.Errorf("failed to send group media message: %w", err)
+	}
+
+	return messageID, nil
+}
+
+func (m *MediaHandler) ProcessMediaMessage(ctx context.Context, mediaMsg MediaMessageInfo) (*MediaMessageInfo, error) {
+	// Process and validate media message
+	if mediaMsg.CID == "" {
+		return nil, fmt.Errorf("media CID is required")
+	}
+
+	// Get media info
+	info, err := m.GetMediaInfo(ctx, mediaMsg.CID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get media info: %w", err)
+	}
+
+	// Update message with actual media info
+	processedMsg := &MediaMessageInfo{
+		ID:        mediaMsg.ID,
+		From:      mediaMsg.From,
+		CID:       mediaMsg.CID,
+		MimeType:  info.MimeType,
+		Filename:  info.Filename,
+		Size:      info.Size,
+		Timestamp: time.Now().Unix(),
+	}
+
+	return processedMsg, nil
+}
+
+func (m *MediaHandler) GenerateThumbnail(ctx context.Context, cid string) ([]byte, error) {
+	// Get media data
+	data, err := m.ipfs.Get(ctx, cid)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get media data: %w", err)
+	}
+
+	// Generate thumbnail using existing thumbnail generation
+	thumbnail, err := GenerateThumbnail(data, detectMimeType(data))
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate thumbnail: %w", err)
+	}
+
+	return thumbnail, nil
+}
+
+func (m *MediaHandler) StoreMediaWithCompression(ctx context.Context, chunks [][]byte) (string, int64, error) {
+	// Reassemble chunks
+	var data []byte
+	for _, chunk := range chunks {
+		data = append(data, chunk...)
+	}
+
+	// Compress data using existing compression function
+	compressed, err := compressData(data)
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to compress media: %w", err)
+	}
+
+	// Store in IPFS
+	cid, err := m.ipfs.Add(ctx, compressed)
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to store compressed media: %w", err)
+	}
+
+	return cid, int64(len(compressed)), nil
+}
+
+func (m *MediaHandler) StoreMediaEncrypted(ctx context.Context, chunks [][]byte) (string, int64, error) {
+	// Use existing encrypted storage method
+	return m.StoreEncryptedMedia(ctx, chunks)
+}
+
+// Helper functions

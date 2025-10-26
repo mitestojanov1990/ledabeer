@@ -83,6 +83,21 @@ func (cm *CallManager) GetCallSession(callID string) *CallSession {
 	return cm.sessions[callID]
 }
 
+// CreateCallSession creates a new call session for testing
+func (cm *CallManager) CreateCallSession(callID, peerID string) *CallSession {
+	session := &CallSession{
+		participants: make(map[string]bool),
+		state:        StateInitiating,
+		rtpHandler:   &RTPHandler{},
+	}
+
+	cm.mutex.Lock()
+	cm.sessions[callID] = session
+	cm.mutex.Unlock()
+
+	return session
+}
+
 func (cm *CallManager) HandleSignaling(ctx context.Context, callID, msgType, sdp, candidate string) (*pb.SignalingMessage, error) {
 	cm.mutex.RLock()
 	session, exists := cm.sessions[callID]

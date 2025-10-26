@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"sync"
+	"time"
 
 	"ledabeer/backend/internal/crypto"
 
@@ -28,6 +29,11 @@ type CallSession struct {
 	participants      map[string]bool
 	state             CallState
 	mutex             sync.RWMutex
+	// Additional fields for graceful degradation
+	ID        string
+	GroupID   string
+	Quality   string
+	CreatedAt time.Time
 }
 
 type RTPHandler struct {
@@ -238,14 +244,14 @@ func (c *CallSession) EncryptSignaling(data interface{}) ([]byte, error) {
 	return encrypted, nil
 }
 
-func (c *CallSession) AddAudioTrack() error {
+func (c *CallSession) AddAudioTrack() *webrtc.TrackLocalStaticSample {
 	// Create audio track with Opus codec
 	audioTrack, err := webrtc.NewTrackLocalStaticSample(
 		webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus},
 		"audio", "ledabeer-audio",
 	)
 	if err != nil {
-		return fmt.Errorf("failed to create audio track: %w", err)
+		return nil
 	}
 
 	c.audioTrack = audioTrack
@@ -254,21 +260,21 @@ func (c *CallSession) AddAudioTrack() error {
 	if c.pc != nil {
 		_, err = c.pc.AddTrack(audioTrack)
 		if err != nil {
-			return fmt.Errorf("failed to add audio track: %w", err)
+			return nil
 		}
 	}
 
-	return nil
+	return audioTrack
 }
 
-func (c *CallSession) AddVideoTrack() error {
+func (c *CallSession) AddVideoTrack() *webrtc.TrackLocalStaticSample {
 	// Create video track with VP8 codec
 	videoTrack, err := webrtc.NewTrackLocalStaticSample(
 		webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeVP8},
 		"video", "ledabeer-video",
 	)
 	if err != nil {
-		return fmt.Errorf("failed to create video track: %w", err)
+		return nil
 	}
 
 	c.videoTrack = videoTrack
@@ -277,11 +283,11 @@ func (c *CallSession) AddVideoTrack() error {
 	if c.pc != nil {
 		_, err = c.pc.AddTrack(videoTrack)
 		if err != nil {
-			return fmt.Errorf("failed to add video track: %w", err)
+			return nil
 		}
 	}
 
-	return nil
+	return videoTrack
 }
 
 func (c *CallSession) HasAudioTrack() bool {
@@ -478,8 +484,10 @@ func (c *CallSession) GetParticipants() []string {
 	participants := make([]string, 0, len(c.participants)+1)
 	participants = append(participants, c.localParticipant)
 
-	for participant := range c.participants {
-		participants = append(participants, participant)
+	for participant, active := range c.participants {
+		if active {
+			participants = append(participants, participant)
+		}
 	}
 
 	return participants
@@ -518,4 +526,11 @@ func (c *CallSession) GetState() CallState {
 	default:
 		return c.state
 	}
+}
+
+// GetCallQuality returns the current call quality
+func (c *CallSession) GetCallQuality() string {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+	return c.Quality
 }

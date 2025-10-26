@@ -2,7 +2,6 @@ package messaging
 
 import (
 	"context"
-	"crypto/rand"
 	"fmt"
 	"sort"
 	"sync"
@@ -292,12 +291,6 @@ func (m *MessageHandler) GetMessageHistory(ctx context.Context, peerID string, l
 	}
 
 	return messages, nil
-}
-
-func generateMessageID() string {
-	bytes := make([]byte, 16)
-	rand.Read(bytes)
-	return fmt.Sprintf("%x", bytes)
 }
 
 // E2EE helper methods

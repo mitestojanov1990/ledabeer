@@ -25,8 +25,8 @@ func TestRTP_RealSend_AudioPacket(t *testing.T) {
 	defer host1.Close()
 
 	session := calls.NewCallSession()
-	err = session.AddAudioTrack()
-	require.NoError(t, err)
+	track := session.AddAudioTrack()
+	require.NotNil(t, track)
 
 	packet := &rtp.Packet{
 		Header: rtp.Header{
