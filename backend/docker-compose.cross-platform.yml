@@ -1,0 +1,151 @@
+version: "3.8"
+
+services:
+  # Linux/Unix backend
+  ledabeer-backend-linux:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ledabeer-backend-linux
+    restart: unless-stopped
+    ports:
+      - "50051:50051" # gRPC
+      - "8080:8080" # HTTP/WebSocket
+      - "4001:4001" # Libp2p
+    environment:
+      - LOG_LEVEL=info
+      - LOG_FORMAT=json
+      - NODE_ROLE=primary
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    networks:
+      - ledabeer-network
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8080/health",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Windows backend (if running on Windows with Docker Desktop)
+  ledabeer-backend-windows:
+    build:
+      context: .
+      dockerfile: Dockerfile.windows
+    container_name: ledabeer-backend-windows
+    restart: unless-stopped
+    ports:
+      - "50052:50051" # gRPC (different port to avoid conflict)
+      - "8081:8080" # HTTP/WebSocket (different port)
+      - "4002:4001" # Libp2p (different port)
+    environment:
+      - LOG_LEVEL=info
+      - LOG_FORMAT=json
+      - NODE_ROLE=secondary
+    volumes:
+      - ./data-windows:/app/data
+      - ./logs-windows:/app/logs
+    networks:
+      - ledabeer-network
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "powershell",
+          "-Command",
+          "try { Invoke-WebRequest -Uri http://localhost:8080/health -UseBasicParsing | Out-Null; exit 0 } catch { exit 1 }",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    profiles:
+      - windows
+
+  # Bootstrap node for P2P network
+  bootstrap-node:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ledabeer-bootstrap
+    restart: unless-stopped
+    ports:
+      - "4003:4001" # Bootstrap port
+    environment:
+      - LOG_LEVEL=info
+      - NODE_ROLE=bootstrap
+    networks:
+      - ledabeer-network
+    command: ["ledabeer", "--bootstrap", "--listen", "/ip4/0.0.0.0/tcp/4001"]
+
+  # Alice node for testing
+  alice-node:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ledabeer-alice
+    restart: unless-stopped
+    ports:
+      - "4004:4001" # Alice port
+    environment:
+      - LOG_LEVEL=info
+      - NODE_ROLE=alice
+      - BOOTSTRAP_PEER=/dns4/bootstrap/tcp/4001/p2p/12D3KooWBootstrap
+    networks:
+      - ledabeer-network
+    depends_on:
+      - bootstrap-node
+    command:
+      [
+        "ledabeer",
+        "--listen",
+        "/ip4/0.0.0.0/tcp/4001",
+        "--bootstrap-peer",
+        "/dns4/bootstrap/tcp/4001/p2p/12D3KooWBootstrap",
+      ]
+    profiles:
+      - testing
+
+  # Bob node for testing
+  bob-node:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ledabeer-bob
+    restart: unless-stopped
+    ports:
+      - "4005:4001" # Bob port
+    environment:
+      - LOG_LEVEL=info
+      - NODE_ROLE=bob
+      - BOOTSTRAP_PEER=/dns4/bootstrap/tcp/4001/p2p/12D3KooWBootstrap
+    networks:
+      - ledabeer-network
+    depends_on:
+      - bootstrap-node
+    command:
+      [
+        "ledabeer",
+        "--listen",
+        "/ip4/0.0.0.0/tcp/4001",
+        "--bootstrap-peer",
+        "/dns4/bootstrap/tcp/4001/p2p/12D3KooWBootstrap",
+      ]
+    profiles:
+      - testing
+
+networks:
+  ledabeer-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

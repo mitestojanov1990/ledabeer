@@ -1,0 +1,47 @@
+# Windows-specific Dockerfile for better Windows support
+FROM golang:1.21-windowsservercore AS builder
+
+# Set working directory
+WORKDIR C:\app
+
+# Copy go mod files
+COPY go.mod go.sum ./
+
+# Download dependencies
+RUN go mod download
+
+# Copy source code
+COPY . .
+
+# Build the application for Windows
+RUN CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build \
+    -ldflags='-w -s' \
+    -o bin\ledabeer.exe .\cmd\node
+
+# Runtime stage
+FROM mcr.microsoft.com/windows/nanoserver:ltsc2022
+
+# Install runtime dependencies
+RUN powershell -Command \
+    Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0; \
+    Start-Service sshd; \
+    Set-Service -Name sshd -StartupType 'Automatic'
+
+# Copy binary from builder stage
+COPY --from=builder C:\app\bin\ledabeer.exe C:\ledabeer.exe
+
+# Create data directory
+RUN mkdir C:\data C:\logs
+
+# Set working directory
+WORKDIR C:\
+
+# Expose ports
+EXPOSE 50051 8080 4001
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD powershell -Command "try { Invoke-WebRequest -Uri http://localhost:8080/health -UseBasicParsing | Out-Null; exit 0 } catch { exit 1 }"
+
+# Run the application
+CMD ["C:\\ledabeer.exe"]
