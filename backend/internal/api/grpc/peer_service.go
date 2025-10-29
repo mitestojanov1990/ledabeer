@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	pb "ledabeer/backend/pkg/proto"
@@ -23,6 +24,7 @@ func NewPeerService(h host.Host) *PeerService {
 }
 
 func (s *PeerService) GetPeers(ctx context.Context, req *pb.GetPeersRequest) (*pb.GetPeersResponse, error) {
+	fmt.Printf("📡 GetPeers called from gRPC client\n")
 	// Get connected peers from libp2p host
 	connectedPeers := s.host.Network().Peers()
 
@@ -36,8 +38,9 @@ func (s *PeerService) GetPeers(ctx context.Context, req *pb.GetPeersRequest) (*p
 		// Get peer info from peerstore
 		peerInfo := s.host.Peerstore().PeerInfo(peerID)
 
-		// Check if peer is connected
-		connected := s.host.Network().Connectedness(peerID) == network.Connected
+		// If we're iterating over Network().Peers(), they are all connected
+		// network.Connectedness check sometimes gives false negatives
+		connected := true
 
 		// Convert addresses to strings
 		addresses := make([]string, len(peerInfo.Addrs))

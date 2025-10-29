@@ -10,7 +10,7 @@ import (
 type Authenticator = auth.Authenticator
 
 func NewAuthenticator() *Authenticator {
-	return auth.NewAuthenticator()
+	return auth.NewAuthenticator(nil) // Use memory repository for now
 }
 
 func WithPeerID(ctx context.Context, peerID string) context.Context {

@@ -87,14 +87,14 @@ func main() {
 	groupService := grpc.NewGroupService(groupManager)
 
 	// Create WebSocket server
-	auth := auth.NewAuthenticator()
+	auth := auth.NewAuthenticator(nil) // Use memory repository for now
 	wsServer := websocket.NewServer(auth)
 
 	// Create API gateway with real services
 	gateway := api.NewGateway(&api.Config{
 		GRPCPort: 50051,
 		HTTPPort: 8080,
-	}, host, msgService, mediaService, callService, peerService, groupService, wsServer)
+	}, host, msgHandler, msgService, mediaService, callService, peerService, groupService, wsServer, auth)
 
 	// Logging is already integrated in the services
 

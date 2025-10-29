@@ -33,10 +33,10 @@ func (s *MessageService) SendMessage(ctx context.Context, req *pb.SendMessageReq
 		}, nil
 	}
 
-	// Route message through bootstrap node (forwards to gRPC-Web subscribers and routes to peer)
-	messageID, err := s.msgHandler.RouteMessage(ctx, req.ToPeerId, req.Content)
+	// Send message directly to peer (each peer now handles its own gRPC-Web clients)
+	messageID, err := s.msgHandler.SendMessage(ctx, req.ToPeerId, req.Content)
 	if err != nil {
-		return nil, fmt.Errorf("failed to route message: %w", err)
+		return nil, fmt.Errorf("failed to send message: %w", err)
 	}
 
 	return &pb.SendMessageResponse{

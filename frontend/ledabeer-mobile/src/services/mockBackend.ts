@@ -20,6 +20,7 @@ export interface Peer {
   publicKey: string;
   online: boolean;
   lastSeen: number;
+  addresses?: string[];
 }
 
 export interface Group {

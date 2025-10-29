@@ -141,7 +141,27 @@ func (m *MessageHandler) SendMessage(ctx context.Context, toPeerID string, conte
 		encryptedContent = content
 	}
 
-	// Send via libp2p stream
+	// Forward to local subscribers first (for gRPC-Web clients on this peer)
+	msg := Message{
+		ID:        messageID,
+		From:      m.host.ID().String(),
+		Content:   content,
+		Timestamp: time.Now().Unix(),
+	}
+
+	m.mutex.RLock()
+	fmt.Printf("📡 Forwarding message to %d local subscribers\n", len(m.subscribers))
+	for _, subscriber := range m.subscribers {
+		select {
+		case subscriber <- msg:
+			fmt.Printf("✅ Message forwarded to local subscriber\n")
+		default:
+			fmt.Printf("⚠️ Local subscriber channel full, skipping\n")
+		}
+	}
+	m.mutex.RUnlock()
+
+	// Send via libp2p stream to destination peer
 	fmt.Printf("🔗 Creating stream to peer: %s\n", peerID)
 	stream, err := m.host.NewStream(ctx, peerID, protocol.ID("/chat/1.0.0"))
 	if err != nil {

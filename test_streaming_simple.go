@@ -6,9 +6,10 @@ import (
 	"log"
 	"time"
 
+	pb "ledabeer/backend/pkg/proto"
+
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	pb "ledabeer/backend/pkg/proto"
 )
 
 func main() {
@@ -49,13 +50,13 @@ func main() {
 		default:
 			// Try to receive a message
 			msg, err := stream.Recv()
-			
+
 			if err != nil {
 				// This is expected - stream might not have data yet
 				time.Sleep(100 * time.Millisecond)
 				continue
 			}
-			
+
 			messageCount++
 			fmt.Printf("📦 Received message %d:\n", messageCount)
 			fmt.Printf("   ID: %s\n", msg.MessageId)

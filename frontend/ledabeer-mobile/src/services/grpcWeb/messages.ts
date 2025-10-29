@@ -443,5 +443,5 @@ function decodePeer(data: Uint8Array): Peer {
     }
   }
 
-  return { id, name, online, lastSeen, addresses };
+  return { id, name, online, lastSeen, addresses, publicKey: '' };
 }

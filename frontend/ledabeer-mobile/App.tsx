@@ -10,12 +10,15 @@ import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, View, Text, ActivityIndicator } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { ChatListScreen } from './src/screens/ChatListScreen';
-import { ChatConversationScreen } from './src/screens/ChatConversationScreen';
+import { ConversationListScreen } from './src/screens/ConversationListScreen';
+import { ConversationDetailScreen } from './src/screens/ConversationDetailScreen';
+import { AuthScreen } from './src/screens/AuthScreen';
+import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { initializeBackend } from './src/services/backend';
 
-export default function App() {
-  const [selectedPeerId, setSelectedPeerId] = useState<string | null>(null);
+function AppContent() {
+  const { isAuthenticated, loading: authLoading } = useAuth();
+  const [selectedConversation, setSelectedConversation] = useState<any>(null);
   const [backendReady, setBackendReady] = useState(false);
   const [backendError, setBackendError] = useState<string | null>(null);
 
@@ -27,7 +30,9 @@ export default function App() {
         setBackendReady(true);
       } catch (error) {
         console.error('[App] Backend initialization failed:', error);
-        setBackendError(error instanceof Error ? error.message : 'Unknown error');
+        setBackendError(
+          error instanceof Error ? error.message : 'Unknown error'
+        );
         // Continue with mock backend
         setBackendReady(true);
       }
@@ -36,37 +41,54 @@ export default function App() {
   }, []);
 
   // Show loading screen while initializing
-  if (!backendReady) {
+  if (!backendReady || authLoading) {
     return (
-      <SafeAreaProvider>
-        <GestureHandlerRootView style={styles.container}>
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#3B82F6" />
-            <Text style={styles.loadingText}>Connecting to backend...</Text>
-          </View>
-          <StatusBar style="light" />
-        </GestureHandlerRootView>
-      </SafeAreaProvider>
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size='large' color='#3B82F6' />
+        <Text style={styles.loadingText}>
+          {authLoading
+            ? 'Checking authentication...'
+            : 'Connecting to backend...'}
+        </Text>
+      </View>
     );
   }
 
+  // Show authentication screen if not authenticated
+  if (!isAuthenticated) {
+    return <AuthScreen onAuthSuccess={() => {}} />;
+  }
+
+  // Show main app if authenticated
+  return (
+    <>
+      {backendError && (
+        <View style={styles.errorBanner}>
+          <Text style={styles.errorText}>
+            Using mock backend (real backend unavailable)
+          </Text>
+        </View>
+      )}
+      {selectedConversation ? (
+        <ConversationDetailScreen
+          conversation={selectedConversation}
+          onBack={() => setSelectedConversation(null)}
+        />
+      ) : (
+        <ConversationListScreen onSelectConversation={setSelectedConversation} />
+      )}
+    </>
+  );
+}
+
+export default function App() {
   return (
     <SafeAreaProvider>
       <GestureHandlerRootView style={styles.container}>
-        {backendError && (
-          <View style={styles.errorBanner}>
-            <Text style={styles.errorText}>Using mock backend (real backend unavailable)</Text>
-          </View>
-        )}
-        {selectedPeerId ? (
-          <ChatConversationScreen
-            peerId={selectedPeerId}
-            onBack={() => setSelectedPeerId(null)}
-          />
-        ) : (
-          <ChatListScreen onSelectChat={setSelectedPeerId} />
-        )}
-        <StatusBar style="light" />
+        <AuthProvider>
+          <AppContent />
+        </AuthProvider>
+        <StatusBar style='light' />
       </GestureHandlerRootView>
     </SafeAreaProvider>
   );

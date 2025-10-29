@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ledabeer Authentication Test</title>
+    <style>
+      body {
+          font-family: Arial, sans-serif;
+          max-width: 800px;
+          margin: 0 auto;
+          padding: 20px;
+          background-color: #f5f5f5;
+      }
+      .container {
+          background: white;
+          padding: 20px;
+          border-radius: 8px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+          margin-bottom: 20px;
+      }
+      .form-group {
+          margin-bottom: 15px;
+      }
+      label {
+          display: block;
+          margin-bottom: 5px;
+          font-weight: bold;
+      }
+      input[type="text"], input[type="email"], input[type="password"] {
+          width: 100%;
+          padding: 8px;
+          border: 1px solid #ddd;
+          border-radius: 4px;
+          box-sizing: border-box;
+      }
+      button {
+          background-color: #007bff;
+          color: white;
+          padding: 10px 20px;
+          border: none;
+          border-radius: 4px;
+          cursor: pointer;
+          margin-right: 10px;
+      }
+      button:hover {
+          background-color: #0056b3;
+      }
+      .success {
+          color: green;
+          font-weight: bold;
+      }
+      .error {
+          color: red;
+          font-weight: bold;
+      }
+      .token-display {
+          background-color: #f8f9fa;
+          padding: 10px;
+          border-radius: 4px;
+          word-break: break-all;
+          font-family: monospace;
+          font-size: 12px;
+      }
+      .user-info {
+          background-color: #e9ecef;
+          padding: 15px;
+          border-radius: 4px;
+          margin-top: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>🔐 Ledabeer Authentication Test</h1>
+
+    <div class="container">
+      <h2>User Registration</h2>
+      <form id="registerForm">
+        <div class="form-group">
+          <label for="regUsername">Username:</label>
+          <input type="text" id="regUsername" required />
+        </div>
+        <div class="form-group">
+          <label for="regEmail">Email:</label>
+          <input type="email" id="regEmail" required />
+        </div>
+        <div class="form-group">
+          <label for="regPassword">Password:</label>
+          <input type="password" id="regPassword" required />
+        </div>
+        <div class="form-group">
+          <label for="regDisplayName">Display Name:</label>
+          <input type="text" id="regDisplayName" required />
+        </div>
+        <button type="submit">Register</button>
+      </form>
+      <div id="registerResult"></div>
+    </div>
+
+    <div class="container">
+      <h2>User Login</h2>
+      <form id="loginForm">
+        <div class="form-group">
+          <label for="loginUsername">Username:</label>
+          <input type="text" id="loginUsername" required />
+        </div>
+        <div class="form-group">
+          <label for="loginPassword">Password:</label>
+          <input type="password" id="loginPassword" required />
+        </div>
+        <button type="submit">Login</button>
+      </form>
+      <div id="loginResult"></div>
+    </div>
+
+    <div class="container">
+      <h2>Current User Info</h2>
+      <button onclick="getCurrentUser()">Get Current User</button>
+      <button onclick="refreshToken()">Refresh Token</button>
+      <button onclick="logout()">Logout</button>
+      <div id="userResult"></div>
+    </div>
+
+    <script>
+      let accessToken = localStorage.getItem('accessToken');
+      let refreshTokenValue = localStorage.getItem('refreshToken');
+
+      // Set up event listeners
+      document.getElementById('registerForm').addEventListener('submit', handleRegister);
+      document.getElementById('loginForm').addEventListener('submit', handleLogin);
+
+      async function handleRegister(e) {
+          e.preventDefault();
+          const formData = new FormData(e.target);
+          const data = {
+              username: formData.get('regUsername') || document.getElementById('regUsername').value,
+              email: formData.get('regEmail') || document.getElementById('regEmail').value,
+              password: formData.get('regPassword') || document.getElementById('regPassword').value,
+              display_name: formData.get('regDisplayName') || document.getElementById('regDisplayName').value
+          };
+
+          try {
+              const response = await fetch('http://192.168.0.140:9001/api/auth/register', {
+                  method: 'POST',
+                  headers: {
+                      'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify(data)
+              });
+
+              const result = await response.json();
+
+              if (response.ok) {
+                  document.getElementById('registerResult').innerHTML =
+                      `<div class="success">✅ Registration successful!</div>
+                       <div class="user-info">
+                           <strong>User ID:</strong> ${result.id}<br>
+                           <strong>Username:</strong> ${result.username}<br>
+                           <strong>Email:</strong> ${result.email}<br>
+                           <strong>Display Name:</strong> ${result.display_name}
+                       </div>`;
+              } else {
+                  document.getElementById('registerResult').innerHTML =
+                      `<div class="error">❌ Registration failed: ${result.error || 'Unknown error'}</div>`;
+              }
+          } catch (error) {
+              document.getElementById('registerResult').innerHTML =
+                  `<div class="error">❌ Network error: ${error.message}</div>`;
+          }
+      }
+
+      async function handleLogin(e) {
+          e.preventDefault();
+          const formData = new FormData(e.target);
+          const data = {
+              username: formData.get('loginUsername') || document.getElementById('loginUsername').value,
+              password: formData.get('loginPassword') || document.getElementById('loginPassword').value
+          };
+
+          try {
+              const response = await fetch('http://192.168.0.140:9001/api/auth/login', {
+                  method: 'POST',
+                  headers: {
+                      'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify(data)
+              });
+
+              const result = await response.json();
+
+              if (response.ok) {
+                  accessToken = result.token.access_token;
+                  refreshTokenValue = result.token.refresh_token;
+
+                  localStorage.setItem('accessToken', accessToken);
+                  localStorage.setItem('refreshToken', refreshTokenValue);
+
+                  document.getElementById('loginResult').innerHTML =
+                      `<div class="success">✅ Login successful!</div>
+                       <div class="user-info">
+                           <strong>User ID:</strong> ${result.user.id}<br>
+                           <strong>Username:</strong> ${result.user.username}<br>
+                           <strong>Email:</strong> ${result.user.email}<br>
+                           <strong>Display Name:</strong> ${result.user.display_name}
+                       </div>
+                       <div class="token-display">
+                           <strong>Access Token:</strong> ${accessToken.substring(0, 50)}...<br>
+                           <strong>Refresh Token:</strong> ${refreshTokenValue.substring(0, 50)}...
+                       </div>`;
+              } else {
+                  document.getElementById('loginResult').innerHTML =
+                      `<div class="error">❌ Login failed: ${result.error || 'Invalid credentials'}</div>`;
+              }
+          } catch (error) {
+              document.getElementById('loginResult').innerHTML =
+                  `<div class="error">❌ Network error: ${error.message}</div>`;
+          }
+      }
+
+      async function getCurrentUser() {
+          if (!accessToken) {
+              document.getElementById('userResult').innerHTML =
+                  `<div class="error">❌ No access token. Please login first.</div>`;
+              return;
+          }
+
+          try {
+              const response = await fetch('http://192.168.0.140:9001/api/auth/me', {
+                  method: 'GET',
+                  headers: {
+                      'Authorization': `Bearer ${accessToken}`
+                  }
+              });
+
+              const result = await response.json();
+
+              if (response.ok) {
+                  document.getElementById('userResult').innerHTML =
+                      `<div class="success">✅ User info retrieved successfully!</div>
+                       <div class="user-info">
+                           <strong>User ID:</strong> ${result.id}<br>
+                           <strong>Username:</strong> ${result.username}<br>
+                           <strong>Email:</strong> ${result.email}<br>
+                           <strong>Display Name:</strong> ${result.display_name}<br>
+                           <strong>Is Active:</strong> ${result.is_active}<br>
+                           <strong>Created At:</strong> ${new Date(result.created_at).toLocaleString()}
+                       </div>`;
+              } else {
+                  document.getElementById('userResult').innerHTML =
+                      `<div class="error">❌ Failed to get user info: ${result.error || 'Unauthorized'}</div>`;
+              }
+          } catch (error) {
+              document.getElementById('userResult').innerHTML =
+                  `<div class="error">❌ Network error: ${error.message}</div>`;
+          }
+      }
+
+      async function refreshToken() {
+          if (!refreshTokenValue) {
+              document.getElementById('userResult').innerHTML =
+                  `<div class="error">❌ No refresh token. Please login first.</div>`;
+              return;
+          }
+
+          try {
+              const response = await fetch('http://192.168.0.140:9001/api/auth/refresh', {
+                  method: 'POST',
+                  headers: {
+                      'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify({
+                      refresh_token: refreshTokenValue
+                  })
+              });
+
+              const result = await response.json();
+
+              if (response.ok) {
+                  accessToken = result.access_token;
+                  refreshTokenValue = result.refresh_token;
+
+                  localStorage.setItem('accessToken', accessToken);
+                  localStorage.setItem('refreshToken', refreshTokenValue);
+
+                  document.getElementById('userResult').innerHTML =
+                      `<div class="success">✅ Token refreshed successfully!</div>
+                       <div class="token-display">
+                           <strong>New Access Token:</strong> ${accessToken.substring(0, 50)}...<br>
+                           <strong>New Refresh Token:</strong> ${refreshTokenValue.substring(0, 50)}...
+                       </div>`;
+              } else {
+                  document.getElementById('userResult').innerHTML =
+                      `<div class="error">❌ Token refresh failed: ${result.error || 'Invalid refresh token'}</div>`;
+              }
+          } catch (error) {
+              document.getElementById('userResult').innerHTML =
+                  `<div class="error">❌ Network error: ${error.message}</div>`;
+          }
+      }
+
+      function logout() {
+          accessToken = null;
+          refreshTokenValue = null;
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('refreshToken');
+
+          document.getElementById('userResult').innerHTML =
+              `<div class="success">✅ Logged out successfully!</div>`;
+      }
+
+      // Load tokens from localStorage on page load
+      window.addEventListener('load', () => {
+          if (accessToken) {
+              document.getElementById('userResult').innerHTML =
+                  `<div class="success">✅ Tokens loaded from localStorage. You can test authenticated endpoints.</div>`;
+          }
+      });
+    </script>
+  </body>
+</html>
