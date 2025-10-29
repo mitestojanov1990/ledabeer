@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { conversationService, Conversation, MessagePreview } from '../services/conversationService';
 import { useAuth } from '../contexts/AuthContext';
+import { useConversationStore } from '../store/conversationStore';
 
 interface ConversationDetailScreenProps {
   conversation: Conversation;
@@ -28,6 +29,7 @@ export const ConversationDetailScreen: React.FC<ConversationDetailScreenProps> =
   onBack,
 }) => {
   const { user } = useAuth();
+  const { markAsRead, addMessage } = useConversationStore();
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [sending, setSending] = useState(false);
@@ -41,7 +43,7 @@ export const ConversationDetailScreen: React.FC<ConversationDetailScreenProps> =
 
   // Mark conversation as read when opened
   useEffect(() => {
-    markAsRead();
+    markConversationAsRead();
   }, [conversation.id]);
 
   const loadMessages = async () => {
@@ -67,9 +69,10 @@ export const ConversationDetailScreen: React.FC<ConversationDetailScreenProps> =
     }
   };
 
-  const markAsRead = async () => {
+  const markConversationAsRead = async () => {
     try {
       await conversationService.markAsRead(conversation.id);
+      markAsRead(conversation.id);
     } catch (error) {
       console.error('Failed to mark as read:', error);
     }
@@ -101,6 +104,16 @@ export const ConversationDetailScreen: React.FC<ConversationDetailScreenProps> =
       };
 
       setMessages(prev => [...prev, newMsg]);
+      
+      // Also add to store for realtime updates
+      addMessage(conversation.id, {
+        id: response.message_id,
+        content: messageContent,
+        from_user: user?.id || '',
+        from_name: user?.display_name || 'You',
+        timestamp: response.timestamp,
+        type: 'text',
+      });
 
       // Scroll to bottom
       setTimeout(() => {

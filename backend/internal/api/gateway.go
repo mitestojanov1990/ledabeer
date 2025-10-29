@@ -328,7 +328,7 @@ func (g *Gateway) startHTTP() error {
 	mux.HandleFunc("/api/users/find-by-username", userSearchHandlers.FindUserByUsername)
 
 	// Conversation endpoints
-	conversationHandlers := NewConversationHandlers(g.conversationService, g.userManager)
+	conversationHandlers := NewConversationHandlers(g.conversationService, g.userManager, g.wsServer)
 	mux.HandleFunc("/api/conversations", conversationHandlers.CreateConversation)
 	mux.HandleFunc("/api/conversations/list", conversationHandlers.GetUserConversations)
 	mux.HandleFunc("/api/conversations/get", conversationHandlers.GetConversation)

@@ -14,10 +14,12 @@ import (
 	"ledabeer/backend/internal/api/websocket"
 	"ledabeer/backend/internal/auth"
 	"ledabeer/backend/internal/calls"
+	"ledabeer/backend/internal/conversations"
 	"ledabeer/backend/internal/logging"
 	"ledabeer/backend/internal/media"
 	"ledabeer/backend/internal/messaging"
 	"ledabeer/backend/internal/network"
+	"ledabeer/backend/internal/user"
 	"ledabeer/backend/internal/storage"
 )
 
@@ -86,9 +88,13 @@ func main() {
 	peerService := grpc.NewPeerService(host)
 	groupService := grpc.NewGroupService(groupManager)
 
-	// Create WebSocket server
+	// Create authentication and conversation services
 	auth := auth.NewAuthenticator(nil) // Use memory repository for now
-	wsServer := websocket.NewServer(auth)
+	userManager := user.NewUserManager()
+	conversationService := conversations.NewConversationService(userManager)
+	
+	// Create WebSocket server
+	wsServer := websocket.NewServer(auth, conversationService)
 
 	// Create API gateway with real services
 	gateway := api.NewGateway(&api.Config{

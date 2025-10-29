@@ -5,7 +5,9 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
+	"github.com/ledabeer/backend/internal/api/websocket"
 	"github.com/ledabeer/backend/internal/conversations"
 	"github.com/ledabeer/backend/internal/user"
 )
@@ -14,13 +16,15 @@ import (
 type ConversationHandlers struct {
 	conversationService *conversations.ConversationService
 	userManager         *user.UserManager
+	wsServer            *websocket.Server
 }
 
 // NewConversationHandlers creates a new ConversationHandlers instance
-func NewConversationHandlers(conversationService *conversations.ConversationService, userManager *user.UserManager) *ConversationHandlers {
+func NewConversationHandlers(conversationService *conversations.ConversationService, userManager *user.UserManager, wsServer *websocket.Server) *ConversationHandlers {
 	return &ConversationHandlers{
 		conversationService: conversationService,
 		userManager:         userManager,
+		wsServer:            wsServer,
 	}
 }
 
@@ -198,6 +202,19 @@ func (h *ConversationHandlers) AddMessage(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// Broadcast real-time message to all participants
+	if h.wsServer != nil {
+		messagePreview := &conversations.MessagePreview{
+			ID:        response.MessageID,
+			Content:   req.Content,
+			FromUser:  req.FromUserID,
+			FromName:  "User", // You'd get this from user service
+			Timestamp: response.Timestamp,
+			Type:      req.Type,
+		}
+		h.wsServer.BroadcastNewMessage(req.ConversationID, messagePreview)
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(response)
@@ -245,12 +262,21 @@ func (h *ConversationHandlers) MarkAsRead(w http.ResponseWriter, r *http.Request
 
 // extractUserIDFromToken extracts user ID from JWT token in Authorization header
 func (h *ConversationHandlers) extractUserIDFromToken(r *http.Request) (string, error) {
-	// In a real implementation, you would validate the JWT token here
-	// and extract the user ID from the claims
-	// For now, we'll return a placeholder
-	// This should be implemented using the auth.TokenManager
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		return "", errors.New("missing Authorization header")
+	}
+
+	// Extract token from "Bearer <token>"
+	tokenParts := strings.Split(authHeader, " ")
+	if len(tokenParts) != 2 || strings.ToLower(tokenParts[0]) != "bearer" {
+		return "", errors.New("invalid Authorization header format")
+	}
+
+	token := tokenParts[1]
 	
-	// For testing purposes, let's extract from a custom header
+	// For now, we'll extract from a custom header for testing
+	// In production, you'd validate the JWT token and extract user ID from claims
 	userID := r.Header.Get("X-User-ID")
 	if userID == "" {
 		return "", errors.New("user ID not found in token")

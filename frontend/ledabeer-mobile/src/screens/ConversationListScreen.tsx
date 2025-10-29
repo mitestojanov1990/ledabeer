@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { conversationService, Conversation, UserSearchResult } from '../services/conversationService';
 import { useAuth } from '../contexts/AuthContext';
+import { useConversationStore, useRealtimeConnection } from '../store/conversationStore';
 
 interface ConversationListScreenProps {
   onSelectConversation: (conversation: Conversation) => void;
@@ -21,26 +22,35 @@ export const ConversationListScreen: React.FC<ConversationListScreenProps> = ({
   onSelectConversation,
 }) => {
   const { user } = useAuth();
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { conversations, loading, error, setConversations, setLoading, setError } = useConversationStore();
+  const { initializeRealtime, cleanupRealtime } = useRealtimeConnection();
+  
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<UserSearchResult[]>([]);
   const [showSearch, setShowSearch] = useState(false);
   const [searching, setSearching] = useState(false);
 
-  // Load conversations on mount
+  // Load conversations on mount and initialize realtime
   useEffect(() => {
     loadConversations();
+    initializeRealtime();
+    
+    // Cleanup on unmount
+    return () => {
+      cleanupRealtime();
+    };
   }, []);
 
   const loadConversations = async () => {
     try {
       setLoading(true);
+      setError(null);
       const response = await conversationService.getConversations();
       setConversations(response.conversations);
     } catch (error) {
       console.error('Failed to load conversations:', error);
+      setError('Failed to load conversations');
       Alert.alert('Error', 'Failed to load conversations');
     } finally {
       setLoading(false);
@@ -80,8 +90,8 @@ export const ConversationListScreen: React.FC<ConversationListScreenProps> = ({
         type: 'direct',
       });
       
-      // Add new conversation to list
-      setConversations(prev => [response.conversation, ...prev]);
+      // Add new conversation to store
+      setConversations([response.conversation, ...conversations]);
       setShowSearch(false);
       setSearchQuery('');
       setSearchResults([]);
