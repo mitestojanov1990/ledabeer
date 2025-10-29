@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Simple gRPC Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .log { background-color: #f5f5f5; padding: 10px; margin: 5px 0; border-radius: 3px; font-family: monospace; font-size: 12px; max-height: 400px; overflow-y: auto; }
+        button { margin: 5px; padding: 8px 16px; }
+    </style>
+</head>
+<body>
+    <h1>Simple gRPC Test</h1>
+    <p>Test if the gRPC ReceiveMessages endpoint is working.</p>
+    
+    <button onclick="testReceiveMessages()">🚀 Test ReceiveMessages</button>
+    
+    <div id="log" class="log"></div>
+
+    <script>
+        function log(message) {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `<div>[${timestamp}] ${message}</div>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        async function testReceiveMessages() {
+            log("🚀 Testing ReceiveMessages gRPC endpoint...");
+            
+            try {
+                const requestData = new Uint8Array([0x00, 0x00, 0x00, 0x00, 0x00]);
+                
+                log("📤 Sending request to ReceiveMessages...");
+                
+                const response = await fetch('http://localhost:8080/ledabeer.MessageService/ReceiveMessages', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/grpc-web+proto',
+                        'X-Grpc-Web': '1',
+                        'X-User-Agent': 'grpc-web-javascript/0.1',
+                    },
+                    body: requestData,
+                });
+
+                log(`📥 Response received: HTTP ${response.status} ${response.statusText}`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                log("✅ Connected to ReceiveMessages endpoint");
+                log("📡 Reading response body...");
+
+                if (response.body) {
+                    const reader = response.body.getReader();
+                    
+                    try {
+                        let messageCount = 0;
+                        while (true) {
+                            const { done, value } = await reader.read();
+                            if (done) {
+                                log("🔚 Stream ended");
+                                break;
+                            }
+
+                            if (value && value.length > 0) {
+                                messageCount++;
+                                log(`📦 Received message ${messageCount}: ${value.length} bytes`);
+                                
+                                // Show first few bytes as hex
+                                const hex = Array.from(value.slice(0, Math.min(20, value.length)))
+                                    .map(b => '0x' + b.toString(16).padStart(2, '0'))
+                                    .join(' ');
+                                log(`   Data: ${hex}${value.length > 20 ? '...' : ''}`);
+                            }
+                        }
+                    } finally {
+                        reader.releaseLock();
+                    }
+                } else {
+                    log("❌ No response body");
+                }
+            } catch (error) {
+                log(`❌ Error: ${error.message}`);
+            }
+        }
+
+        // Auto-test on page load
+        window.onload = function() {
+            log("🎯 Simple gRPC Test Ready - Click 'Test ReceiveMessages' to start");
+        };
+    </script>
+</body>
+</html>

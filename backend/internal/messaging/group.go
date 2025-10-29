@@ -764,6 +764,28 @@ func (gm *GroupManager) GetGroupKeyVersion(groupID string) int {
 	return group.KeyVersion
 }
 
+// GetGroups returns all groups that the current user is a member of
+func (gm *GroupManager) GetGroups() []*Group {
+	gm.mu.RLock()
+	defer gm.mu.RUnlock()
+
+	groups := make([]*Group, 0, len(gm.groups))
+	for _, group := range gm.groups {
+		groups = append(groups, group)
+	}
+
+	return groups
+}
+
+// GetGroup returns a specific group by ID
+func (gm *GroupManager) GetGroup(groupID string) (*Group, bool) {
+	gm.mu.RLock()
+	defer gm.mu.RUnlock()
+
+	group, exists := gm.groups[groupID]
+	return group, exists
+}
+
 // RotateGroupKeys rotates the group keys and notifies all members
 func (gm *GroupManager) RotateGroupKeys(ctx context.Context, groupID string) error {
 	gm.mu.Lock()

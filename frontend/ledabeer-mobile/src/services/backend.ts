@@ -6,7 +6,12 @@
  */
 
 import { getRealGrpcWebClient } from './grpcWeb/realClient';
-import { mockBackend, Message as MockMessage, Peer, Group } from './mockBackend';
+import {
+  mockBackend,
+  Message as MockMessage,
+  Peer,
+  Group,
+} from './mockBackend';
 
 // Configuration
 const USE_REAL_BACKEND = true; // Set to false to force mock backend
@@ -33,7 +38,11 @@ export interface BackendService {
   // Groups
   getGroups(): Promise<Group[]>;
   getGroup(groupId: string): Promise<Group | null>;
-  createGroup(name: string, description: string, memberIds: string[]): Promise<Group>;
+  createGroup(
+    name: string,
+    description: string,
+    memberIds: string[]
+  ): Promise<Group>;
 
   // Conversations
   getAllConversations(): Promise<Array<Peer | Group>>;
@@ -73,15 +82,66 @@ class RealBackendService implements BackendService {
   }
 
   async getPeers(): Promise<Peer[]> {
-    // TODO: Implement real peer discovery via backend
-    // For now, return mock data
-    console.log('[RealBackend] Peer discovery not yet implemented, using mock');
-    return mockBackend.getPeers();
+    try {
+      console.log('[RealBackend] Getting peers from backend');
+      console.log('[RealBackend] USE_REAL_BACKEND:', USE_REAL_BACKEND);
+      const grpcClient = getRealGrpcWebClient();
+      console.log('[RealBackend] gRPC client created:', !!grpcClient);
+      const peers = await grpcClient.getPeers();
+      console.log('[RealBackend] Raw peers from gRPC:', peers);
+
+      // Convert gRPC Peer format to our Peer format
+      const convertedPeers: Peer[] = peers.map((peer) => ({
+        id: peer.id,
+        name: peer.name,
+        publicKey: peer.publicKey || '', // Add publicKey field
+        online: peer.online,
+        lastSeen: peer.lastSeen, // Keep as number (Unix timestamp)
+        addresses: peer.addresses,
+      }));
+
+      console.log(
+        `[RealBackend] Got ${convertedPeers.length} peers from backend`
+      );
+      return convertedPeers;
+    } catch (error) {
+      console.error('[RealBackend] Failed to get peers from backend:', error);
+      console.log('[RealBackend] Falling back to mock data');
+      return mockBackend.getPeers();
+    }
   }
 
   async getPeer(peerId: string): Promise<Peer | null> {
-    const peers = await this.getPeers();
-    return peers.find((p) => p.id === peerId) || null;
+    try {
+      console.log(`[RealBackend] Getting peer ${peerId} from backend`);
+      const grpcClient = getRealGrpcWebClient();
+      const peer = await grpcClient.getPeer(peerId);
+
+      if (!peer) {
+        console.log(`[RealBackend] Peer ${peerId} not found in backend`);
+        return null;
+      }
+
+      // Convert gRPC Peer format to our Peer format
+      const convertedPeer: Peer = {
+        id: peer.id,
+        name: peer.name,
+        online: peer.online,
+        lastSeen: new Date(peer.lastSeen * 1000), // Convert from Unix timestamp
+        addresses: peer.addresses,
+      };
+
+      console.log(`[RealBackend] Got peer ${peerId} from backend`);
+      return convertedPeer;
+    } catch (error) {
+      console.error(
+        `[RealBackend] Failed to get peer ${peerId} from backend:`,
+        error
+      );
+      console.log('[RealBackend] Falling back to mock data');
+      const peers = await mockBackend.getPeers();
+      return peers.find((p) => p.id === peerId) || null;
+    }
   }
 
   async getGroups(): Promise<Group[]> {
@@ -106,7 +166,10 @@ class RealBackendService implements BackendService {
   }
 
   async getAllConversations(): Promise<Array<Peer | Group>> {
-    const [peers, groups] = await Promise.all([this.getPeers(), this.getGroups()]);
+    const [peers, groups] = await Promise.all([
+      this.getPeers(),
+      this.getGroups(),
+    ]);
     return [...peers, ...groups];
   }
 
@@ -158,7 +221,10 @@ class RealBackendService implements BackendService {
     }
   }
 
-  async sendGroupMessage(groupId: string, content: string): Promise<MockMessage> {
+  async sendGroupMessage(
+    groupId: string,
+    content: string
+  ): Promise<MockMessage> {
     try {
       const response = await this.grpcClient.sendGroupMessage(groupId, content);
 
@@ -176,7 +242,10 @@ class RealBackendService implements BackendService {
 
       return message;
     } catch (error) {
-      console.error('[RealBackend] Failed to send group message, using mock:', error);
+      console.error(
+        '[RealBackend] Failed to send group message, using mock:',
+        error
+      );
       return mockBackend.sendGroupMessage(groupId, content);
     }
   }
@@ -262,7 +331,10 @@ class MockBackendService implements BackendService {
     return mockBackend.sendMessage(peerId, content);
   }
 
-  async sendGroupMessage(groupId: string, content: string): Promise<MockMessage> {
+  async sendGroupMessage(
+    groupId: string,
+    content: string
+  ): Promise<MockMessage> {
     return mockBackend.sendGroupMessage(groupId, content);
   }
 
@@ -298,7 +370,10 @@ class AutoBackendService implements BackendService {
 
       // Try to connect with timeout
       const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Connection timeout')), BACKEND_TIMEOUT)
+        setTimeout(
+          () => reject(new Error('Connection timeout')),
+          BACKEND_TIMEOUT
+        )
       );
 
       await Promise.race([this.realBackend.connect(), timeoutPromise]);
@@ -310,7 +385,10 @@ class AutoBackendService implements BackendService {
         throw new Error('Backend not connected');
       }
     } catch (error) {
-      console.warn('[AutoBackend] Failed to connect to real backend, using mock:', error);
+      console.warn(
+        '[AutoBackend] Failed to connect to real backend, using mock:',
+        error
+      );
       this.currentBackend = this.mockBackend;
       await this.mockBackend.connect();
     }
@@ -368,7 +446,10 @@ class AutoBackendService implements BackendService {
     return this.currentBackend.sendMessage(peerId, content);
   }
 
-  async sendGroupMessage(groupId: string, content: string): Promise<MockMessage> {
+  async sendGroupMessage(
+    groupId: string,
+    content: string
+  ): Promise<MockMessage> {
     return this.currentBackend.sendGroupMessage(groupId, content);
   }
 

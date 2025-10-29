@@ -112,12 +112,15 @@ func NewMessageHandlerWithE2EE(h host.Host) *MessageHandler {
 
 func (m *MessageHandler) SendMessage(ctx context.Context, toPeerID string, content []byte) (string, error) {
 	messageID := generateMessageID()
+	fmt.Printf("📤 SendMessage called: toPeerID=%s, content=%s\n", toPeerID, string(content))
 
 	// Parse peer ID
 	peerID, err := peer.Decode(toPeerID)
 	if err != nil {
+		fmt.Printf("❌ Failed to decode peer ID: %v\n", err)
 		return "", fmt.Errorf("invalid peer ID: %w", err)
 	}
+	fmt.Printf("✅ Parsed peer ID: %s\n", peerID)
 
 	// Encrypt message if E2EE is available
 	var encryptedContent []byte
@@ -139,18 +142,67 @@ func (m *MessageHandler) SendMessage(ctx context.Context, toPeerID string, conte
 	}
 
 	// Send via libp2p stream
+	fmt.Printf("🔗 Creating stream to peer: %s\n", peerID)
 	stream, err := m.host.NewStream(ctx, peerID, protocol.ID("/chat/1.0.0"))
 	if err != nil {
+		fmt.Printf("❌ Failed to create stream: %v\n", err)
 		return "", fmt.Errorf("failed to create stream: %w", err)
 	}
+	fmt.Printf("✅ Stream created successfully\n")
 	defer stream.Close()
 
 	// Write encrypted message
+	fmt.Printf("📝 Writing %d bytes to stream\n", len(encryptedContent))
 	_, err = stream.Write(encryptedContent)
 	if err != nil {
+		fmt.Printf("❌ Failed to write to stream: %v\n", err)
 		return "", fmt.Errorf("failed to write message: %w", err)
 	}
+	fmt.Printf("✅ Message written to stream successfully\n")
 
+	m.mutex.Lock()
+	m.sent[messageID] = true
+	m.messageCount++
+	m.mutex.Unlock()
+
+	return messageID, nil
+}
+
+// RouteMessage routes a message through the bootstrap node
+// It forwards to local subscribers (gRPC-Web clients) and routes to destination peer
+func (m *MessageHandler) RouteMessage(ctx context.Context, toPeerID string, content []byte) (string, error) {
+	messageID := generateMessageID()
+	fmt.Printf("🔄 RouteMessage called: toPeerID=%s, content=%s\n", toPeerID, string(content))
+
+	// 1. Forward to local subscribers (for gRPC-Web clients)
+	msg := Message{
+		ID:        messageID,
+		From:      m.host.ID().String(),
+		Content:   content,
+		Timestamp: time.Now().Unix(),
+	}
+
+	m.mutex.RLock()
+	fmt.Printf("📡 Forwarding message to %d local subscribers\n", len(m.subscribers))
+	for _, subscriber := range m.subscribers {
+		select {
+		case subscriber <- msg:
+			fmt.Printf("✅ Message forwarded to local subscriber\n")
+		default:
+			fmt.Printf("⚠️ Local subscriber channel full, skipping\n")
+		}
+	}
+	m.mutex.RUnlock()
+
+	// 2. Route to destination peer via libp2p (if not local)
+	if toPeerID != m.host.ID().String() {
+		fmt.Printf("🌐 Routing message to peer: %s\n", toPeerID)
+		return m.SendMessage(ctx, toPeerID, content)
+	} else {
+		fmt.Printf("📍 Message is local, not routing to peer\n")
+	}
+
+	// Update counters
 	m.mutex.Lock()
 	m.sent[messageID] = true
 	m.messageCount++
@@ -164,7 +216,10 @@ func (m *MessageHandler) SubscribeToMessages(ctx context.Context) <-chan Message
 
 	m.mutex.Lock()
 	m.subscribers = append(m.subscribers, msgChan)
+	subscriberCount := len(m.subscribers)
 	m.mutex.Unlock()
+
+	fmt.Printf("📡 New subscriber added, total subscribers: %d\n", subscriberCount)
 
 	// Start message handler if not already started
 	go m.handleIncomingMessages(ctx)
@@ -180,12 +235,17 @@ func (m *MessageHandler) handleIncomingMessages(ctx context.Context) {
 func (m *MessageHandler) handleStream(stream network.Stream) {
 	defer stream.Close()
 
+	fmt.Printf("📨 handleStream called from peer: %s\n", stream.Conn().RemotePeer())
+
 	// Read message from stream
 	buffer := make([]byte, 4096)
 	n, err := stream.Read(buffer)
 	if err != nil {
+		fmt.Printf("❌ Error reading from stream: %v\n", err)
 		return
 	}
+
+	fmt.Printf("📦 Read %d bytes from stream\n", n)
 
 	encryptedContent := buffer[:n]
 	fromPeer := stream.Conn().RemotePeer().String()
@@ -223,13 +283,15 @@ func (m *MessageHandler) handleStream(stream network.Stream) {
 		Timestamp: time.Now().Unix(),
 	}
 
-	// Notify all subscribers
+	// Forward message to all subscribers
 	m.mutex.RLock()
-	for _, sub := range m.subscribers {
+	fmt.Printf("📡 Forwarding message to %d subscribers\n", len(m.subscribers))
+	for _, subscriber := range m.subscribers {
 		select {
-		case sub <- msg:
+		case subscriber <- msg:
+			fmt.Printf("✅ Message forwarded to subscriber\n")
 		default:
-			// Skip if channel is full
+			fmt.Printf("⚠️ Subscriber channel full, skipping\n")
 		}
 	}
 	m.mutex.RUnlock()

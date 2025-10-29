@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Debug E2E Parsing</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 20px; }
+      .log { background-color: #f5f5f5; padding: 10px; margin: 5px 0; border-radius: 3px; font-family: monospace; font-size: 12px; max-height: 400px; overflow-y: auto; }
+      button { margin: 5px; padding: 8px 16px; }
+    </style>
+  </head>
+  <body>
+    <h1>Debug E2E Parsing</h1>
+    <p>Debug the exact same parsing logic as the E2E test.</p>
+
+    <button onclick="testParsing()">🔍 Test Parsing</button>
+
+    <div id="log" class="log"></div>
+
+    <script>
+      function log(message) {
+          const logDiv = document.getElementById('log');
+          const timestamp = new Date().toLocaleTimeString();
+          logDiv.innerHTML += `<div>[${timestamp}] ${message}</div>`;
+          logDiv.scrollTop = logDiv.scrollHeight;
+      }
+
+      async function testParsing() {
+          log("🔍 Testing GetPeers endpoint with E2E parsing logic...");
+
+          try {
+              const requestData = new Uint8Array([0x00, 0x00, 0x00, 0x00, 0x00]);
+
+              const response = await fetch('http://localhost:8080/ledabeer.PeerService/GetPeers', {
+                  method: 'POST',
+                  headers: {
+                      'Content-Type': 'application/grpc-web+proto',
+                      'X-Grpc-Web': '1',
+                      'X-User-Agent': 'grpc-web-javascript/0.1',
+                  },
+                  body: requestData,
+              });
+
+              if (!response.ok) {
+                  throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+              }
+
+              const buffer = await response.arrayBuffer();
+              const data = new Uint8Array(buffer);
+
+              log(`✅ GetPeers response received: ${data.length} bytes`);
+
+              // Skip gRPC frame header (5 bytes) and parse protobuf
+              const protobufData = data.slice(5);
+
+              log(`📦 Protobuf data: ${protobufData.length} bytes`);
+
+              // Show first 50 bytes as hex for debugging
+              const hex = Array.from(protobufData.slice(0, Math.min(50, protobufData.length)))
+                  .map(b => '0x' + b.toString(16).padStart(2, '0'))
+                  .join(' ');
+              log(`🔍 First 50 bytes: ${hex}${protobufData.length > 50 ? '...' : ''}`);
+
+              // Simple protobuf parsing for GetPeersResponse (EXACT SAME AS E2E TEST)
+              let offset = 0;
+              const peers = [];
+
+              while (offset < protobufData.length) {
+                  const tag = protobufData[offset++];
+                  log(`🔍 Processing tag: 0x${tag.toString(16)} at offset ${offset-1}`);
+
+                  if (tag === 0x0a) { // Field 1: repeated Peer peers
+                      const length = protobufData[offset++];
+                      log(`📦 Found peer data, length: ${length}`);
+                      const peerData = protobufData.slice(offset, offset + length);
+                      offset += length;
+
+                      // Parse peer data
+                      let peerOffset = 0;
+                      let peerId = null;
+                      let online = false;
+                      let addresses = [];
+
+                      while (peerOffset < peerData.length) {
+                          const peerTag = peerData[peerOffset++];
+                          if (peerTag === 0x0a) { // Field 1: id
+                              const idLength = peerData[peerOffset++];
+                              peerId = new TextDecoder().decode(peerData.slice(peerOffset, peerOffset + idLength));
+                              peerOffset += idLength;
+                              log(`👤 Found peer ID: ${peerId}`);
+                          } else if (peerTag === 0x12) { // Field 2: addresses
+                              const addrLength = peerData[peerOffset++];
+                              const addr = new TextDecoder().decode(peerData.slice(peerOffset, peerOffset + addrLength));
+                              addresses.push(addr);
+                              peerOffset += addrLength;
+                              log(`📍 Found address: ${addr}`);
+                          } else if (peerTag === 0x18) { // Field 3: online
+                              online = peerData[peerOffset++] === 1;
+                              log(`🟢 Online status: ${online}`);
+                          } else {
+                              // Skip unknown field
+                              log(`❓ Unknown peer field: 0x${peerTag.toString(16)}`);
+                              peerOffset++;
+                          }
+                      }
+
+                      if (peerId && online) {
+                          peers.push(peerId);
+                          log(`✅ Added online peer: ${peerId}`);
+                      } else {
+                          log(`⚠️ Skipped peer - ID: ${peerId}, Online: ${online}`);
+                      }
+                  } else {
+                      // Skip unknown field
+                      log(`❓ Unknown field: 0x${tag.toString(16)}`);
+                      offset++;
+                  }
+              }
+
+              log(`✅ Final result: Found ${peers.length} online peers: ${peers.join(', ')}`);
+
+          } catch (error) {
+              log(`❌ Error: ${error.message}`);
+          }
+      }
+
+      // Auto-test on page load
+      window.onload = function() {
+          log("🎯 Debug Test Ready - Click button to test parsing");
+          setTimeout(testParsing, 1000);
+      };
+    </script>
+  </body>
+</html>

@@ -33,10 +33,10 @@ func (s *MessageService) SendMessage(ctx context.Context, req *pb.SendMessageReq
 		}, nil
 	}
 
-	// Send via real messaging layer
-	messageID, err := s.msgHandler.SendMessage(ctx, req.ToPeerId, req.Content)
+	// Route message through bootstrap node (forwards to gRPC-Web subscribers and routes to peer)
+	messageID, err := s.msgHandler.RouteMessage(ctx, req.ToPeerId, req.Content)
 	if err != nil {
-		return nil, fmt.Errorf("failed to send message: %w", err)
+		return nil, fmt.Errorf("failed to route message: %w", err)
 	}
 
 	return &pb.SendMessageResponse{
@@ -46,8 +46,11 @@ func (s *MessageService) SendMessage(ctx context.Context, req *pb.SendMessageReq
 }
 
 func (s *MessageService) ReceiveMessages(req *pb.ReceiveMessagesRequest, stream pb.MessageService_ReceiveMessagesServer) error {
+	fmt.Printf("📡 ReceiveMessages gRPC method called\n")
+
 	// Handle nil handler for unit tests
 	if s.msgHandler == nil {
+		fmt.Printf("⚠️ Message handler is nil, sending test message\n")
 		// Send a test message for unit tests
 		msg := &pb.Message{
 			MessageId:  generateMessageID(),
@@ -58,6 +61,7 @@ func (s *MessageService) ReceiveMessages(req *pb.ReceiveMessagesRequest, stream 
 		return stream.Send(msg)
 	}
 
+	fmt.Printf("✅ Message handler available, subscribing to messages\n")
 	// Stream from real messaging layer
 	msgChan := s.msgHandler.SubscribeToMessages(stream.Context())
 

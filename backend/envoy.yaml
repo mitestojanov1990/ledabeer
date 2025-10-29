@@ -21,6 +21,14 @@ static_resources:
             - name: local_service
               domains: ["*"]
               routes:
+              - match: { prefix: "/peer-id" }
+                route:
+                  cluster: http_backend
+                  timeout: 0s
+              - match: { prefix: "/peers" }
+                route:
+                  cluster: http_backend
+                  timeout: 0s
               - match: { prefix: "/" }
                 route:
                   cluster: grpc_backend
@@ -46,6 +54,19 @@ static_resources:
               "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
 
   clusters:
+  - name: http_backend
+    connect_timeout: 0.25s
+    type: logical_dns
+    lb_policy: round_robin
+    load_assignment:
+      cluster_name: http_backend
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: bootstrap
+                port_value: 8080
   - name: grpc_backend
     connect_timeout: 0.25s
     type: logical_dns

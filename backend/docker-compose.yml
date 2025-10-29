@@ -22,7 +22,8 @@ services:
       - "4002:4002"
     environment:
       - NODE_ROLE=alice
-      - BOOTSTRAP_PEER=/dns4/bootstrap/tcp/4001/p2p/12D3KooWBootstrap
+      - BOOTSTRAP_HOST=bootstrap
+      - BOOTSTRAP_PORT=4001
     networks:
       - ledabeer-network
     depends_on:
@@ -32,8 +33,10 @@ services:
         "node",
         "--listen",
         "/ip4/0.0.0.0/tcp/4002",
-        "--bootstrap-peer",
-        "/dns4/bootstrap/tcp/4001/p2p/12D3KooWBootstrap",
+        "--bootstrap-host",
+        "bootstrap",
+        "--bootstrap-port",
+        "4001",
       ]
 
   # Bob node
@@ -44,7 +47,8 @@ services:
       - "4003:4003"
     environment:
       - NODE_ROLE=bob
-      - BOOTSTRAP_PEER=/dns4/bootstrap/tcp/4001/p2p/12D3KooWBootstrap
+      - BOOTSTRAP_HOST=bootstrap
+      - BOOTSTRAP_PORT=4001
     networks:
       - ledabeer-network
     depends_on:
@@ -54,8 +58,10 @@ services:
         "node",
         "--listen",
         "/ip4/0.0.0.0/tcp/4003",
-        "--bootstrap-peer",
-        "/dns4/bootstrap/tcp/4001/p2p/12D3KooWBootstrap",
+        "--bootstrap-host",
+        "bootstrap",
+        "--bootstrap-port",
+        "4001",
       ]
 
   # Charlie node
@@ -66,7 +72,8 @@ services:
       - "4004:4004"
     environment:
       - NODE_ROLE=charlie
-      - BOOTSTRAP_PEER=/dns4/bootstrap/tcp/4001/p2p/12D3KooWBootstrap
+      - BOOTSTRAP_HOST=bootstrap
+      - BOOTSTRAP_PORT=4001
     networks:
       - ledabeer-network
     depends_on:
@@ -76,8 +83,10 @@ services:
         "node",
         "--listen",
         "/ip4/0.0.0.0/tcp/4004",
-        "--bootstrap-peer",
-        "/dns4/bootstrap/tcp/4001/p2p/12D3KooWBootstrap",
+        "--bootstrap-host",
+        "bootstrap",
+        "--bootstrap-port",
+        "4001",
       ]
 
   # Envoy proxy for gRPC-Web

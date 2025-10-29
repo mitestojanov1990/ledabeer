@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>E2E gRPC-Web Streaming Test</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 20px; }
+      .client { border: 1px solid #ccc; margin: 10px; padding: 15px; border-radius: 5px; }
+      .client1 { background-color: #e3f2fd; }
+      .client2 { background-color: #f3e5f5; }
+      .log { background-color: #f5f5f5; padding: 10px; margin: 5px 0; border-radius: 3px; font-family: monospace; font-size: 12px; max-height: 200px; overflow-y: auto; }
+      button { margin: 5px; padding: 8px 16px; }
+      input { margin: 5px; padding: 5px; width: 200px; }
+    </style>
+  </head>
+  <body>
+    <h1>E2E gRPC-Web Streaming Test</h1>
+    <p>
+      This test simulates two clients communicating through the full stack:
+      Frontend → Envoy → Backend
+    </p>
+
+    <div class="client client1">
+      <h3>Client 1 (Alice)</h3>
+      <input
+        type="text"
+        id="client1-message"
+        placeholder="Type message to send"
+        value="Hello from Alice!"
+      />
+      <button onclick="sendMessageFromClient1()">Send Message</button>
+      <button onclick="startStreamingClient1()">Start Listening</button>
+      <button onclick="stopStreamingClient1()">Stop Listening</button>
+      <div id="client1-log" class="log"></div>
+    </div>
+
+    <div class="client client2">
+      <h3>Client 2 (Bob)</h3>
+      <input
+        type="text"
+        id="client2-message"
+        placeholder="Type message to send"
+        value="Hello from Bob!"
+      />
+      <button onclick="sendMessageFromClient2()">Send Message</button>
+      <button onclick="startStreamingClient2()">Start Listening</button>
+      <button onclick="stopStreamingClient2()">Stop Listening</button>
+      <div id="client2-log" class="log"></div>
+    </div>
+
+    <div style="margin-top: 20px;">
+      <h3>Test Instructions:</h3>
+      <ol>
+        <li>Click "Discover Peers" to find available backend peers</li>
+        <li>Click "Start Listening" on both clients</li>
+        <li>Click "Send Message" on Client 1</li>
+        <li>Check if Client 2 receives the message</li>
+        <li>Send a message from Client 2 and check if Client 1 receives it</li>
+      </ol>
+      <button
+        onclick="discoverPeers()"
+        style="background-color: #4CAF50; color: white; padding: 10px 20px; margin: 10px 0;"
+      >
+        🔍 Discover Peers
+      </button>
+    </div>
+
+    <script>
+      let client1Reader = null;
+      let client2Reader = null;
+      let client1Cancelled = false;
+      let client2Cancelled = false;
+      let availablePeers = [];
+      let client1PeerId = null;
+      let client2PeerId = null;
+
+      function log(client, message) {
+          const logDiv = document.getElementById(`client${client}-log`);
+          const timestamp = new Date().toLocaleTimeString();
+          logDiv.innerHTML += `<div>[${timestamp}] ${message}</div>`;
+          logDiv.scrollTop = logDiv.scrollHeight;
+      }
+
+      async function discoverPeers() {
+          try {
+              log(1, "🔍 Discovering available peers...");
+
+              const requestData = new Uint8Array([0x00, 0x00, 0x00, 0x00, 0x00]);
+
+              const response = await fetch('http://localhost:8080/ledabeer.PeerService/GetPeers', {
+                  method: 'POST',
+                  headers: {
+                      'Content-Type': 'application/grpc-web+proto',
+                      'X-Grpc-Web': '1',
+                      'X-User-Agent': 'grpc-web-javascript/0.1',
+                  },
+                  body: requestData,
+              });
+
+              if (!response.ok) {
+                  throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+              }
+
+              const buffer = await response.arrayBuffer();
+              const data = new Uint8Array(buffer);
+
+                // Skip gRPC frame header (5 bytes) and parse protobuf
+                const protobufData = data.slice(5);
+                
+                log(1, `📦 Protobuf data: ${protobufData.length} bytes`);
+                
+                // Show first 50 bytes as hex for debugging
+                const hex = Array.from(protobufData.slice(0, Math.min(50, protobufData.length)))
+                    .map(b => '0x' + b.toString(16).padStart(2, '0'))
+                    .join(' ');
+                log(1, `🔍 First 50 bytes: ${hex}${protobufData.length > 50 ? '...' : ''}`);
+                
+                // Simple protobuf parsing for GetPeersResponse
+                // This is a simplified parser - in production you'd use a proper protobuf library
+                let offset = 0;
+                const peers = [];
+                
+                while (offset < protobufData.length) {
+                    const tag = protobufData[offset++];
+                    log(1, `🔍 Processing tag: 0x${tag.toString(16)} at offset ${offset-1}`);
+                    
+                    if (tag === 0x0a) { // Field 1: repeated Peer peers
+                        const length = protobufData[offset++];
+                        log(1, `📦 Found peer data, length: ${length}`);
+                        const peerData = protobufData.slice(offset, offset + length);
+                        offset += length;
+                        
+                        // Parse peer data
+                        let peerOffset = 0;
+                        let peerId = null;
+                        let online = false;
+                        let addresses = [];
+                        
+                        while (peerOffset < peerData.length) {
+                            const peerTag = peerData[peerOffset++];
+                            if (peerTag === 0x0a) { // Field 1: id
+                                const idLength = peerData[peerOffset++];
+                                peerId = new TextDecoder().decode(peerData.slice(peerOffset, peerOffset + idLength));
+                                peerOffset += idLength;
+                                log(1, `👤 Found peer ID: ${peerId}`);
+                            } else if (peerTag === 0x12) { // Field 2: addresses
+                                const addrLength = peerData[peerOffset++];
+                                const addr = new TextDecoder().decode(peerData.slice(peerOffset, peerOffset + addrLength));
+                                addresses.push(addr);
+                                peerOffset += addrLength;
+                                log(1, `📍 Found address: ${addr}`);
+                            } else if (peerTag === 0x18) { // Field 3: online
+                                online = peerData[peerOffset++] === 1;
+                                log(1, `🟢 Online status: ${online}`);
+                            } else {
+                                // Skip unknown field
+                                log(1, `❓ Unknown peer field: 0x${peerTag.toString(16)}`);
+                                peerOffset++;
+                            }
+                        }
+                        
+                        if (peerId && online) {
+                            peers.push(peerId);
+                            log(1, `✅ Added online peer: ${peerId}`);
+                        } else {
+                            log(1, `⚠️ Skipped peer - ID: ${peerId}, Online: ${online}`);
+                        }
+                    } else {
+                        // Skip unknown field
+                        log(1, `❓ Unknown field: 0x${tag.toString(16)}`);
+                        offset++;
+                    }
+                }
+
+              availablePeers = peers;
+              log(1, `✅ Found ${peers.length} online peers: ${peers.join(', ')}`);
+
+              // Assign peer IDs to clients
+              if (peers.length >= 2) {
+                  client1PeerId = peers[0];
+                  client2PeerId = peers[1];
+                  log(1, `👤 Client 1 (Alice) will use peer: ${client1PeerId}`);
+                  log(2, `👤 Client 2 (Bob) will use peer: ${client2PeerId}`);
+              } else {
+                  log(1, `⚠️ Not enough peers available for testing (need at least 2, found ${peers.length})`);
+              }
+
+          } catch (error) {
+              log(1, `❌ Error discovering peers: ${error.message}`);
+          }
+      }
+
+      async function startStreamingClient1() {
+          await startStreaming(1);
+      }
+
+      async function startStreamingClient2() {
+          await startStreaming(2);
+      }
+
+      async function startStreaming(clientNum) {
+          const clientName = clientNum === 1 ? 'Alice' : 'Bob';
+          log(clientNum, `🚀 Starting streaming for ${clientName}...`);
+
+          try {
+              const requestData = new Uint8Array([0x00, 0x00, 0x00, 0x00, 0x00]);
+
+              const response = await fetch('http://localhost:8080/ledabeer.MessageService/ReceiveMessages', {
+                  method: 'POST',
+                  headers: {
+                      'Content-Type': 'application/grpc-web+proto',
+                      'X-Grpc-Web': '1',
+                      'X-User-Agent': 'grpc-web-javascript/0.1',
+                  },
+                  body: requestData,
+              });
+
+              if (!response.ok) {
+                  throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+              }
+
+              log(clientNum, `✅ Connected to streaming endpoint (HTTP ${response.status})`);
+              log(clientNum, `📡 Waiting for messages...`);
+
+              // Handle streaming response
+              if (response.body) {
+                  const reader = response.body.getReader();
+
+                  if (clientNum === 1) {
+                      client1Reader = reader;
+                      client1Cancelled = false;
+                  } else {
+                      client2Reader = reader;
+                      client2Cancelled = false;
+                  }
+
+                  try {
+                      let messageCount = 0;
+                      while (!(clientNum === 1 ? client1Cancelled : client2Cancelled)) {
+                          const { done, value } = await reader.read();
+                          if (done) {
+                              log(clientNum, `🔚 Stream ended`);
+                              break;
+                          }
+
+                          if (value && value.length > 0) {
+                              messageCount++;
+                              log(clientNum, `📦 Received message ${messageCount}: ${value.length} bytes`);
+
+                              // Show first few bytes as hex
+                              const hex = Array.from(value.slice(0, Math.min(20, value.length)))
+                                  .map(b => '0x' + b.toString(16).padStart(2, '0'))
+                                  .join(' ');
+                              log(clientNum, `   Data: ${hex}${value.length > 20 ? '...' : ''}`);
+
+                              // Try to decode as text (simplified)
+                              try {
+                                  const text = new TextDecoder().decode(value.slice(5)); // Skip gRPC frame header
+                                  log(clientNum, `   Decoded: ${text}`);
+                              } catch (e) {
+                                  log(clientNum, `   (Could not decode as text)`);
+                              }
+                          }
+                      }
+                  } finally {
+                      reader.releaseLock();
+                      if (clientNum === 1) {
+                          client1Reader = null;
+                      } else {
+                          client2Reader = null;
+                      }
+                  }
+              } else {
+                  log(clientNum, `❌ No response body`);
+              }
+          } catch (error) {
+              log(clientNum, `❌ Error: ${error.message}`);
+          }
+      }
+
+      function stopStreamingClient1() {
+          stopStreaming(1);
+      }
+
+      function stopStreamingClient2() {
+          stopStreaming(2);
+      }
+
+      function stopStreaming(clientNum) {
+          const clientName = clientNum === 1 ? 'Alice' : 'Bob';
+          log(clientNum, `🛑 Stopping streaming for ${clientName}`);
+
+          if (clientNum === 1) {
+              client1Cancelled = true;
+              if (client1Reader) {
+                  client1Reader.cancel();
+              }
+          } else {
+              client2Cancelled = true;
+              if (client2Reader) {
+                  client2Reader.cancel();
+              }
+          }
+      }
+
+      async function sendMessageFromClient1() {
+          await sendMessage(1);
+      }
+
+      async function sendMessageFromClient2() {
+          await sendMessage(2);
+      }
+
+        async function sendMessage(clientNum) {
+            const clientName = clientNum === 1 ? 'Alice' : 'Bob';
+            const messageInput = document.getElementById(`client${clientNum}-message`);
+            const message = messageInput.value;
+
+                log(clientNum, `📤 Sending message: "${message}"`);
+
+            // Check if we have discovered peers
+            if (availablePeers.length === 0) {
+                log(clientNum, `❌ No peers discovered yet. Click "Discover Peers" first.`);
+                return;
+            }
+
+            try {
+                // Create gRPC-Web request for SendMessage
+                const toPeerId = clientNum === 1 ? client2PeerId : client1PeerId;
+                const content = message;
+
+                if (!toPeerId) {
+                    log(clientNum, `❌ No target peer ID available for ${clientName}`);
+                    return;
+                }
+
+                log(clientNum, `🎯 Sending to peer: ${toPeerId}`);
+
+              // Simple protobuf encoding for SendMessageRequest
+              const encoder = new TextEncoder();
+              const toPeerIdBytes = encoder.encode(toPeerId);
+              const contentBytes = encoder.encode(content);
+
+              const output = [];
+              // Field 1: to_peer_id (string)
+              output.push(0x0a); // Tag: field 1, wire type 2 (length-delimited)
+              output.push(toPeerIdBytes.length); // Length
+              output.push(...Array.from(toPeerIdBytes)); // Data
+              // Field 2: content (bytes)
+              output.push(0x12); // Tag: field 2, wire type 2 (length-delimited)
+              output.push(contentBytes.length); // Length
+              output.push(...Array.from(contentBytes)); // Data
+
+              // Wrap in gRPC frame
+              const protobufData = new Uint8Array(output);
+              const length = protobufData.length;
+              const frame = new Uint8Array(5 + length);
+              frame[0] = 0x00; // No compression
+              frame[1] = (length >> 24) & 0xff; // Length (big-endian)
+              frame[2] = (length >> 16) & 0xff;
+              frame[3] = (length >> 8) & 0xff;
+              frame[4] = length & 0xff;
+              frame.set(protobufData, 5);
+
+              const response = await fetch('http://localhost:8080/ledabeer.MessageService/SendMessage', {
+                  method: 'POST',
+                  headers: {
+                      'Content-Type': 'application/grpc-web+proto',
+                      'X-Grpc-Web': '1',
+                      'X-User-Agent': 'grpc-web-javascript/0.1',
+                  },
+                  body: frame,
+              });
+
+              if (response.ok) {
+                  const buffer = await response.arrayBuffer();
+                  const data = new Uint8Array(buffer);
+                  log(clientNum, `✅ Message sent successfully (${data.length} bytes response)`);
+              } else {
+                  log(clientNum, `❌ Failed to send message: HTTP ${response.status}`);
+              }
+          } catch (error) {
+              log(clientNum, `❌ Error sending message: ${error.message}`);
+          }
+      }
+
+        // Auto-start both clients
+        window.onload = function() {
+            log(1, "🎯 E2E Test Ready - Click 'Discover Peers' first, then 'Start Listening' on both clients");
+            log(2, "🎯 E2E Test Ready - Click 'Discover Peers' first, then 'Start Listening' on both clients");
+
+            // Auto-discover peers on page load
+            setTimeout(discoverPeers, 1000);
+        };
+    </script>
+  </body>
+</html>
