@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/ledabeer/backend/internal/auth"
+	"ledabeer/backend/internal/auth"
 )
 
 // UserHandlers handles user-related HTTP endpoints

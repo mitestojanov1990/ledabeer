@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ledabeer/backend/internal/auth"
+	"ledabeer/backend/internal/auth"
 	"github.com/libp2p/go-libp2p/core/peer"
 )
 

@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	grpcapi "ledabeer/backend/internal/api/grpc"
+	httphandlers "ledabeer/backend/internal/api/http"
 	"ledabeer/backend/internal/api/websocket"
 	"ledabeer/backend/internal/auth"
 	"ledabeer/backend/internal/conversations"
@@ -215,19 +216,21 @@ type Config struct {
 	HTTPPort int
 }
 
-func NewGateway(cfg *Config, h host.Host, msgHandler *messaging.MessageHandler, msgService *grpcapi.MessageService, mediaService *grpcapi.MediaService, callService *grpcapi.CallService, peerService *grpcapi.PeerService, groupService *grpcapi.GroupService, wsServer *websocket.Server, authenticator *auth.Authenticator) *Gateway {
+func NewGateway(cfg *Config, h host.Host, msgHandler *messaging.MessageHandler, msgService *grpcapi.MessageService, mediaService *grpcapi.MediaService, peerService *grpcapi.PeerService, groupService *grpcapi.GroupService, wsServer *websocket.Server, authenticator *auth.Authenticator) *Gateway {
 	grpcServer := grpc.NewServer()
 
 	// Register services
 	pb.RegisterMessageServiceServer(grpcServer, msgService)
 	pb.RegisterMediaServiceServer(grpcServer, mediaService)
-	pb.RegisterCallServiceServer(grpcServer, callService)
 	pb.RegisterPeerServiceServer(grpcServer, peerService)
 	pb.RegisterGroupServiceServer(grpcServer, groupService)
 
 	// Initialize user manager and conversation service
 	userManager := user.NewUserManager()
 	conversationService := conversations.NewConversationService(userManager)
+	
+	// Create user service for user search
+	userService := auth.NewUserService(authenticator.GetUserRepository())
 
 	return &Gateway{
 		grpcServer:          grpcServer,
@@ -322,13 +325,13 @@ func (g *Gateway) startHTTP() error {
 	mux.HandleFunc("/api/auth/logout", authHandlers.LogoutUser)
 
 	// User search endpoints
-	userSearchHandlers := NewUserSearchHandlers(g.userManager)
+	userSearchHandlers := httphandlers.NewUserSearchHandlers(g.userManager)
 	mux.HandleFunc("/api/users/search", userSearchHandlers.SearchUsers)
 	mux.HandleFunc("/api/users/find-by-email", userSearchHandlers.FindUserByEmail)
 	mux.HandleFunc("/api/users/find-by-username", userSearchHandlers.FindUserByUsername)
 
 	// Conversation endpoints
-	conversationHandlers := NewConversationHandlers(g.conversationService, g.userManager, g.wsServer)
+	conversationHandlers := httphandlers.NewConversationHandlers(g.conversationService, g.userManager, g.wsServer)
 	mux.HandleFunc("/api/conversations", conversationHandlers.CreateConversation)
 	mux.HandleFunc("/api/conversations/list", conversationHandlers.GetUserConversations)
 	mux.HandleFunc("/api/conversations/get", conversationHandlers.GetConversation)

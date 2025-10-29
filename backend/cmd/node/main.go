@@ -13,7 +13,6 @@ import (
 	"ledabeer/backend/internal/api/grpc"
 	"ledabeer/backend/internal/api/websocket"
 	"ledabeer/backend/internal/auth"
-	"ledabeer/backend/internal/calls"
 	"ledabeer/backend/internal/conversations"
 	"ledabeer/backend/internal/logging"
 	"ledabeer/backend/internal/media"
@@ -79,12 +78,9 @@ func main() {
 		os.Exit(1)
 	}
 	mediaHandler := media.NewMediaHandler(ipfsNode)
-	callManager := calls.NewCallManager(host)
-
 	// Create real gRPC services
 	msgService := grpc.NewMessageService(msgHandler, groupManager)
 	mediaService := grpc.NewMediaService(mediaHandler)
-	callService := grpc.NewCallService(callManager)
 	peerService := grpc.NewPeerService(host)
 	groupService := grpc.NewGroupService(groupManager)
 
@@ -100,7 +96,7 @@ func main() {
 	gateway := api.NewGateway(&api.Config{
 		GRPCPort: 50051,
 		HTTPPort: 8080,
-	}, host, msgHandler, msgService, mediaService, callService, peerService, groupService, wsServer, auth)
+	}, host, msgHandler, msgService, mediaService, peerService, groupService, wsServer, auth)
 
 	// Logging is already integrated in the services
 

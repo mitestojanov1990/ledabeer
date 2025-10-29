@@ -74,7 +74,7 @@ class ConversationService {
     if (token) {
       return {
         'Authorization': `Bearer ${token}`,
-        'X-User-ID': authService.getUser()?.id || '', // For testing
+        'X-User-ID': authService.getCurrentUserSync()?.id || '', // For testing
       };
     }
     return {};

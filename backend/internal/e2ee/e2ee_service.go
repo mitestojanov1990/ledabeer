@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ledabeer/backend/internal/user"
+	"ledabeer/backend/internal/user"
 	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/crypto/curve25519"
 )

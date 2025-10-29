@@ -6,8 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/ledabeer/backend/internal/auth"
-	"github.com/ledabeer/backend/internal/chat"
+	"ledabeer/backend/internal/chat"
 )
 
 // ChatHandlers handles chat-related HTTP endpoints
@@ -180,8 +179,6 @@ func (h *ChatHandlers) extractUserIDFromToken(r *http.Request) (string, error) {
 	if len(parts) != 2 || parts[0] != "Bearer" {
 		return "", errors.New("invalid authorization header format")
 	}
-
-	token := parts[1]
 
 	// In a real implementation, you would validate the JWT token here
 	// and extract the user ID from the claims

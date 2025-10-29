@@ -217,3 +217,44 @@ func (r *UserRepository) CheckEmailExists(email string) (bool, error) {
 
 	return count > 0, nil
 }
+
+// SearchUsers searches for users by username, email, or display name
+func (r *UserRepository) SearchUsers(query string, limit int) ([]*User, error) {
+	searchQuery := `
+		SELECT id, username, email, password_hash, display_name, avatar_url, is_active, created_at, updated_at, last_login_at
+		FROM users 
+		WHERE username ILIKE $1 OR email ILIKE $1 OR display_name ILIKE $1
+		ORDER BY username
+		LIMIT $2
+	`
+	
+	searchPattern := "%" + query + "%"
+	rows, err := r.db.Query(searchQuery, searchPattern, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search users: %w", err)
+	}
+	defer rows.Close()
+
+	var users []*User
+	for rows.Next() {
+		user := &User{}
+		err := rows.Scan(
+			&user.ID,
+			&user.Username,
+			&user.Email,
+			&user.PasswordHash,
+			&user.DisplayName,
+			&user.AvatarURL,
+			&user.IsActive,
+			&user.CreatedAt,
+			&user.UpdatedAt,
+			&user.LastLoginAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan user: %w", err)
+		}
+		users = append(users, user)
+	}
+
+	return users, nil
+}

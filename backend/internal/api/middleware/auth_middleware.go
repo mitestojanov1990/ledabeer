@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/ledabeer/backend/internal/auth"
+	"ledabeer/backend/internal/auth"
 )
 
 // AuthMiddleware provides JWT authentication middleware

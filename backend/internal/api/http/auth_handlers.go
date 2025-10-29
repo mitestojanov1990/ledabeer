@@ -1,10 +1,10 @@
-package api
+package http
 
 import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/ledabeer/backend/internal/auth"
+	"ledabeer/backend/internal/auth"
 )
 
 // AuthHandlers handles authentication HTTP endpoints

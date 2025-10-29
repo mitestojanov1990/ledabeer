@@ -13,7 +13,7 @@ import (
 type contextKey string
 
 const (
-	userIDKey    contextKey = "user_id"
+	UserIDKey    contextKey = "user_id"
 	peerIDKey    contextKey = "peer_id"
 	signatureKey contextKey = "signature"
 )
@@ -173,7 +173,7 @@ func (a *Authenticator) RefreshToken(refreshToken string) (*AuthToken, error) {
 
 // Context helpers
 func WithUserID(ctx context.Context, userID string) context.Context {
-	return context.WithValue(ctx, userIDKey, userID)
+	return context.WithValue(ctx, UserIDKey, userID)
 }
 
 func WithPeerID(ctx context.Context, peerID string) context.Context {

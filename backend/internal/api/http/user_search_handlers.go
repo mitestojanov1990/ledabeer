@@ -5,18 +5,21 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/ledabeer/backend/internal/user"
+	"ledabeer/backend/internal/auth"
+	"ledabeer/backend/internal/user"
 )
 
 // UserSearchHandlers handles user search HTTP endpoints
 type UserSearchHandlers struct {
 	userManager *user.UserManager
+	authService *auth.UserService
 }
 
 // NewUserSearchHandlers creates a new UserSearchHandlers instance
-func NewUserSearchHandlers(userManager *user.UserManager) *UserSearchHandlers {
+func NewUserSearchHandlers(userManager *user.UserManager, authService *auth.UserService) *UserSearchHandlers {
 	return &UserSearchHandlers{
 		userManager: userManager,
+		authService: authService,
 	}
 }
 
@@ -69,30 +72,32 @@ func (h *UserSearchHandlers) SearchUsers(w http.ResponseWriter, r *http.Request)
 		req.Limit = 50
 	}
 
-	// Search users
-	searchResults := h.userManager.SearchUsers(req.Query)
+	// Search users using auth service
+	searchResults, err := h.authService.SearchUsers(&auth.SearchUsersRequest{
+		Query: req.Query,
+		Limit: req.Limit,
+	})
+	if err != nil {
+		h.writeErrorResponse(w, http.StatusInternalServerError, "Failed to search users")
+		return
+	}
 
 	// Convert to response format
-	users := make([]UserSearchResult, 0, len(searchResults))
-	for _, userInfo := range searchResults {
-		// Limit results
-		if len(users) >= req.Limit {
-			break
-		}
-
+	users := make([]UserSearchResult, 0, len(searchResults.Users))
+	for _, user := range searchResults.Users {
 		users = append(users, UserSearchResult{
-			UserID:      userInfo.UserID,
-			Username:    userInfo.Username,
-			DisplayName: userInfo.DisplayName,
-			Email:       userInfo.Email,
-			AvatarURL:   userInfo.AvatarURL,
-			IsOnline:    userInfo.IsOnline,
+			UserID:      user.ID,
+			Username:    user.Username,
+			DisplayName: user.DisplayName,
+			Email:       user.Email,
+			AvatarURL:   user.AvatarURL,
+			IsOnline:    false, // TODO: Check online status from user manager
 		})
 	}
 
 	response := SearchUsersResponse{
 		Users: users,
-		Total: len(users),
+		Total: searchResults.Total,
 	}
 
 	w.Header().Set("Content-Type", "application/json")

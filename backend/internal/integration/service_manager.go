@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/ledabeer/backend/internal/auth"
-	"github.com/ledabeer/backend/internal/calls"
-	"github.com/ledabeer/backend/internal/e2ee"
-	"github.com/ledabeer/backend/internal/media"
-	"github.com/ledabeer/backend/internal/user"
+	"ledabeer/backend/internal/auth"
+	"ledabeer/backend/internal/calls"
+	"ledabeer/backend/internal/e2ee"
+	"ledabeer/backend/internal/media"
+	"ledabeer/backend/internal/user"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 )

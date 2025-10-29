@@ -6,8 +6,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ledabeer/backend/internal/user"
+	"ledabeer/backend/internal/user"
 	"github.com/google/uuid"
+	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 // ConversationService manages conversations between users
@@ -109,8 +110,14 @@ func (cs *ConversationService) CreateConversation(req *CreateConversationRequest
 	cs.mutex.Lock()
 	defer cs.mutex.Unlock()
 
+	// Convert string ID to peer.ID
+	creatorPeerID, err := peer.Decode(req.CreatorID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid creator ID: %w", err)
+	}
+	
 	// Validate creator exists
-	creatorInfo, err := cs.userManager.GetUserByPeerID(req.CreatorID)
+	creatorInfo, err := cs.userManager.GetUserByPeerID(creatorPeerID)
 	if err != nil {
 		return nil, fmt.Errorf("creator validation failed: %w", err)
 	}
@@ -124,8 +131,14 @@ func (cs *ConversationService) CreateConversation(req *CreateConversationRequest
 	var conversationID string
 
 	if req.Type == "direct" {
+		// Convert participant ID to peer.ID
+		participantPeerID, err := peer.Decode(req.ParticipantID)
+		if err != nil {
+			return nil, fmt.Errorf("invalid participant ID: %w", err)
+		}
+		
 		// Validate participant exists
-		participantInfo, err := cs.userManager.GetUserByPeerID(req.ParticipantID)
+		participantInfo, err := cs.userManager.GetUserByPeerID(participantPeerID)
 		if err != nil {
 			return nil, fmt.Errorf("participant validation failed: %w", err)
 		}
@@ -191,8 +204,14 @@ func (cs *ConversationService) GetUserConversations(req *GetUserConversationsReq
 	cs.mutex.RLock()
 	defer cs.mutex.RUnlock()
 
+	// Convert user ID to peer.ID
+	userPeerID, err := peer.Decode(req.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid user ID: %w", err)
+	}
+	
 	// Validate user exists
-	_, err := cs.userManager.GetUserByPeerID(req.UserID)
+	_, err = cs.userManager.GetUserByPeerID(userPeerID)
 	if err != nil {
 		return nil, fmt.Errorf("user validation failed: %w", err)
 	}

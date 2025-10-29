@@ -3,7 +3,6 @@ package websocket
 import (
 	"encoding/json"
 	"net/http"
-	"strings"
 	"sync"
 
 	"ledabeer/backend/internal/auth"
@@ -56,7 +55,7 @@ func (s *Server) HandleConnection(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate token and get user ID
-	user, err := s.auth.ValidateAccessToken(token)
+	user, err := s.auth.ValidateToken(token)
 	if err != nil {
 		http.Error(w, "Invalid token", http.StatusUnauthorized)
 		return

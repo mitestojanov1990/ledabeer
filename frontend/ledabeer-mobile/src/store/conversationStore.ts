@@ -131,10 +131,9 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
         break;
         
       case 'conversation_update':
-        // Update conversation
-        if (message.conversation) {
-          get().updateConversation(message.conversation);
-        }
+        // Update conversation - this would need to be handled differently
+        // since RealtimeMessage doesn't have a conversation property
+        console.log('[ConversationStore] Conversation update received:', message);
         break;
         
       case 'user_online':

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ledabeer/backend/internal/auth"
+	"ledabeer/backend/internal/auth"
 )
 
 // ChatService handles chat-related operations with authentication

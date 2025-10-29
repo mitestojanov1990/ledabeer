@@ -11,7 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ledabeer/backend/internal/user"
+	"ledabeer/backend/internal/user"
+	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 // MediaService handles media file operations for authenticated users
@@ -80,8 +81,14 @@ type MediaDownloadResponse struct {
 
 // UploadMedia uploads a media file for a user
 func (ms *MediaService) UploadMedia(req *MediaUploadRequest) (*MediaUploadResponse, error) {
+	// Convert user ID to peer.ID
+	userPeerID, err := peer.Decode(req.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid user ID: %w", err)
+	}
+	
 	// Validate user exists
-	_, err := ms.userManager.GetUserByPeerID(req.UserID)
+	_, err = ms.userManager.GetUserByPeerID(userPeerID)
 	if err != nil {
 		return nil, fmt.Errorf("user validation failed: %w", err)
 	}
@@ -221,8 +228,14 @@ func (ms *MediaService) DownloadMedia(req *MediaDownloadRequest) (*MediaDownload
 
 // GetUserMedia gets all media files for a user
 func (ms *MediaService) GetUserMedia(userID string) ([]*MediaFile, error) {
+	// Convert user ID to peer.ID
+	userPeerID, err := peer.Decode(userID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid user ID: %w", err)
+	}
+	
 	// Validate user exists
-	_, err := ms.userManager.GetUserByPeerID(userID)
+	_, err = ms.userManager.GetUserByPeerID(userPeerID)
 	if err != nil {
 		return nil, fmt.Errorf("user validation failed: %w", err)
 	}

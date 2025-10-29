@@ -7,9 +7,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ledabeer/backend/internal/api/websocket"
-	"github.com/ledabeer/backend/internal/conversations"
-	"github.com/ledabeer/backend/internal/user"
+	"ledabeer/backend/internal/api/websocket"
+	"ledabeer/backend/internal/conversations"
+	"ledabeer/backend/internal/user"
 )
 
 // ConversationHandlers handles conversation-related HTTP endpoints
@@ -273,8 +273,6 @@ func (h *ConversationHandlers) extractUserIDFromToken(r *http.Request) (string, 
 		return "", errors.New("invalid Authorization header format")
 	}
 
-	token := tokenParts[1]
-	
 	// For now, we'll extract from a custom header for testing
 	// In production, you'd validate the JWT token and extract user ID from claims
 	userID := r.Header.Get("X-User-ID")

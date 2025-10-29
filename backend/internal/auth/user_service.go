@@ -64,7 +64,7 @@ func (us *UserService) SearchUsers(req *SearchUsersRequest) (*SearchUsersRespons
 	// Convert to response format
 	userResponses := make([]UserResponse, len(users))
 	for i, user := range users {
-		userResponses[i] = user.ToResponse()
+		userResponses[i] = *user.ToResponse()
 	}
 
 	return &SearchUsersResponse{
@@ -84,7 +84,7 @@ func (us *UserService) GetUserByID(userID string) (*UserResponse, error) {
 	}
 
 	response := user.ToResponse()
-	return &response, nil
+	return response, nil
 }
 
 // GetUserByUsername gets a user by username
@@ -98,7 +98,7 @@ func (us *UserService) GetUserByUsername(username string) (*UserResponse, error)
 	}
 
 	response := user.ToResponse()
-	return &response, nil
+	return response, nil
 }
 
 // GetUserByEmail gets a user by email
@@ -112,7 +112,7 @@ func (us *UserService) GetUserByEmail(email string) (*UserResponse, error) {
 	}
 
 	response := user.ToResponse()
-	return &response, nil
+	return response, nil
 }
 
 // ValidateUserExists validates if a user exists for chat creation

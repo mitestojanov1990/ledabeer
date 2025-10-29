@@ -6,7 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ledabeer/backend/internal/user"
+	"ledabeer/backend/internal/user"
+	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 // CallService handles voice/video calls for authenticated users
@@ -122,8 +123,14 @@ func (cs *CallService) InitiateCall(req *InitiateCallRequest) (*InitiateCallResp
 		return nil, errors.New("call type must be 'voice' or 'video'")
 	}
 
+	// Convert initiator ID to peer.ID
+	initiatorPeerID, err := peer.Decode(req.InitiatorID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid initiator ID: %w", err)
+	}
+	
 	// Validate initiator exists
-	initiatorInfo, err := cs.userManager.GetUserByPeerID(req.InitiatorID)
+	initiatorInfo, err := cs.userManager.GetUserByPeerID(initiatorPeerID)
 	if err != nil {
 		return nil, fmt.Errorf("initiator validation failed: %w", err)
 	}
@@ -131,7 +138,13 @@ func (cs *CallService) InitiateCall(req *InitiateCallRequest) (*InitiateCallResp
 	// Validate recipients exist and are online
 	var participants []CallParticipant
 	for _, recipientID := range req.RecipientIDs {
-		recipientInfo, err := cs.userManager.GetUserByPeerID(recipientID)
+		// Convert recipient ID to peer.ID
+		recipientPeerID, err := peer.Decode(recipientID)
+		if err != nil {
+			return nil, fmt.Errorf("invalid recipient ID %s: %w", recipientID, err)
+		}
+		
+		recipientInfo, err := cs.userManager.GetUserByPeerID(recipientPeerID)
 		if err != nil {
 			return nil, fmt.Errorf("recipient validation failed for %s: %w", recipientID, err)
 		}
@@ -211,8 +224,14 @@ func (cs *CallService) JoinCall(req *JoinCallRequest) (*JoinCallResponse, error)
 		return nil, errors.New("call is not active")
 	}
 
+	// Convert user ID to peer.ID
+	userPeerID, err := peer.Decode(req.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid user ID: %w", err)
+	}
+	
 	// Validate user exists
-	userInfo, err := cs.userManager.GetUserByPeerID(req.UserID)
+	userInfo, err := cs.userManager.GetUserByPeerID(userPeerID)
 	if err != nil {
 		return nil, fmt.Errorf("user validation failed: %w", err)
 	}
