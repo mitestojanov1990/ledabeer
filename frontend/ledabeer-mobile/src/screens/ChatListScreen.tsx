@@ -13,7 +13,7 @@ import {
   FlatList,
   ActivityIndicator,
 } from 'react-native';
-import { useChatStore } from '../store/chatStore';
+import { useChatStore, Conversation } from '../store/chatStore';
 import { Peer } from '../services/mockBackend';
 
 interface ChatListScreenProps {
@@ -21,7 +21,13 @@ interface ChatListScreenProps {
 }
 
 export function ChatListScreen({ onSelectChat }: ChatListScreenProps) {
-  const { conversations, messages, loading, loadConversations, initializeMessageListener } = useChatStore();
+  const {
+    conversations,
+    messages,
+    loading,
+    loadConversations,
+    initializeMessageListener,
+  } = useChatStore();
 
   useEffect(() => {
     loadConversations();
@@ -40,13 +46,17 @@ export function ChatListScreen({ onSelectChat }: ChatListScreenProps) {
     const isToday = date.toDateString() === now.toDateString();
 
     if (isToday) {
-      return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+      return date.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
     }
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
-  const renderChatItem = ({ item }: { item: Peer }) => {
+  const renderChatItem = ({ item }: { item: Conversation }) => {
     const lastMessage = getLastMessage(item.id);
+    const isPeer = 'online' in item;
 
     return (
       <TouchableOpacity
@@ -55,15 +65,19 @@ export function ChatListScreen({ onSelectChat }: ChatListScreenProps) {
         activeOpacity={0.7}
       >
         <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{item.name.charAt(0).toUpperCase()}</Text>
-          {item.online && <View style={styles.onlineIndicator} />}
+          <Text style={styles.avatarText}>
+            {item.name.charAt(0).toUpperCase()}
+          </Text>
+          {isPeer && item.online && <View style={styles.onlineIndicator} />}
         </View>
 
         <View style={styles.chatInfo}>
           <View style={styles.chatHeader}>
             <Text style={styles.chatName}>{item.name}</Text>
             {lastMessage && (
-              <Text style={styles.timestamp}>{formatTime(lastMessage.timestamp)}</Text>
+              <Text style={styles.timestamp}>
+                {formatTime(lastMessage.timestamp)}
+              </Text>
             )}
           </View>
 
@@ -87,7 +101,7 @@ export function ChatListScreen({ onSelectChat }: ChatListScreenProps) {
   if (loading && conversations.length === 0) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#3B82F6" />
+        <ActivityIndicator size='large' color='#3B82F6' />
         <Text style={styles.loadingText}>Loading conversations...</Text>
       </View>
     );
@@ -100,7 +114,7 @@ export function ChatListScreen({ onSelectChat }: ChatListScreenProps) {
         <Text style={styles.headerSubtitle}>End-to-End Encrypted Chats</Text>
       </View>
 
-      <FlatList
+      <FlatList<Conversation>
         data={conversations}
         renderItem={renderChatItem}
         keyExtractor={(item) => item.id}

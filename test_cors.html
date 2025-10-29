@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>CORS Test</title>
+  </head>
+  <body>
+    <h1>CORS Test</h1>
+    <button onclick="testCors()">Test CORS</button>
+    <div id="output"></div>
+
+    <script>
+      async function testCors() {
+          const output = document.getElementById('output');
+          output.innerHTML = 'Testing CORS...<br>';
+
+          try {
+              console.log('Testing CORS preflight...');
+
+              // Test OPTIONS request first
+              const optionsResponse = await fetch('http://localhost:9001/ledabeer.PeerService/GetPeers', {
+                  method: 'OPTIONS',
+                  headers: {
+                      'Content-Type': 'application/grpc-web+proto',
+                      'Access-Control-Request-Method': 'POST',
+                      'Access-Control-Request-Headers': 'content-type,grpc-timeout'
+                  }
+              });
+
+              console.log('OPTIONS Response status:', optionsResponse.status);
+              output.innerHTML += `OPTIONS Status: ${optionsResponse.status}<br>`;
+
+              if (optionsResponse.ok) {
+                  output.innerHTML += 'CORS preflight successful!<br>';
+
+                  // Now test the actual POST request
+                  const postResponse = await fetch('http://localhost:9001/ledabeer.PeerService/GetPeers', {
+                      method: 'POST',
+                      headers: {
+                          'Content-Type': 'application/grpc-web+proto',
+                          'grpc-timeout': '10s'
+                      },
+                      body: new Uint8Array([0x00, 0x00, 0x00, 0x00, 0x00])
+                  });
+
+                  console.log('POST Response status:', postResponse.status);
+                  output.innerHTML += `POST Status: ${postResponse.status}<br>`;
+
+                  if (postResponse.ok) {
+                      const data = await postResponse.arrayBuffer();
+                      output.innerHTML += `Success! Response size: ${data.byteLength} bytes<br>`;
+                  } else {
+                      const text = await postResponse.text();
+                      output.innerHTML += `POST Error: ${text}<br>`;
+                  }
+              } else {
+                  const text = await optionsResponse.text();
+                  output.innerHTML += `CORS Error: ${text}<br>`;
+              }
+
+          } catch (error) {
+              console.error('Error:', error);
+              output.innerHTML += `Error: ${error.message}<br>`;
+          }
+      }
+    </script>
+  </body>
+</html>
+

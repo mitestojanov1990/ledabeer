@@ -12,6 +12,15 @@ import {
   decodeSendMessageResponse,
   decodeMessage,
   decodeMessageHistoryResponse,
+  encodeGetPeersRequest,
+  encodeGetPeerRequest,
+  encodeGetConnectedPeersRequest,
+  decodeGetPeersResponse,
+  decodeGetPeerResponse,
+  decodeGetConnectedPeersResponse,
+  Peer,
+  GetPeersResponse,
+  GetPeerResponse,
 } from './messages';
 
 // Backend gRPC-Web endpoint (Envoy proxy)
@@ -19,6 +28,7 @@ const GRPC_WEB_HOST = 'http://localhost:8080';
 
 // Service paths
 const MESSAGE_SERVICE = 'ledabeer.MessageService';
+const PEER_SERVICE = 'ledabeer.PeerService';
 
 // Message types matching proto definitions
 export interface Message {
@@ -56,7 +66,9 @@ async function grpcUnaryCall(
   });
 
   if (!response.ok) {
-    throw new Error(`gRPC call failed: ${response.status} ${response.statusText}`);
+    throw new Error(
+      `gRPC call failed: ${response.status} ${response.statusText}`
+    );
   }
 
   const contentType = response.headers.get('content-type');
@@ -113,7 +125,10 @@ export class RealGrpcWebClient {
       console.log('[RealGrpcWebClient] Connecting to', this.host);
 
       // Test connection - 415 or 400 means Envoy is accessible
-      const response = await fetch(`${this.host}/`).catch(() => ({ status: 0, ok: false }));
+      const response = await fetch(`${this.host}/`).catch(() => ({
+        status: 0,
+        ok: false,
+      }));
 
       if (response.ok || response.status === 400 || response.status === 415) {
         this.connected = true;
@@ -137,7 +152,10 @@ export class RealGrpcWebClient {
   /**
    * Send a text message to a peer (REAL IMPLEMENTATION)
    */
-  async sendMessage(toPeerId: string, content: string): Promise<SendMessageResponse> {
+  async sendMessage(
+    toPeerId: string,
+    content: string
+  ): Promise<SendMessageResponse> {
     try {
       console.log('[RealGrpcWebClient] Sending message to', toPeerId);
 
@@ -166,7 +184,10 @@ export class RealGrpcWebClient {
   /**
    * Send a message to a group (REAL IMPLEMENTATION)
    */
-  async sendGroupMessage(groupId: string, content: string): Promise<SendMessageResponse> {
+  async sendGroupMessage(
+    groupId: string,
+    content: string
+  ): Promise<SendMessageResponse> {
     try {
       console.log('[RealGrpcWebClient] Sending group message to', groupId);
 
@@ -183,7 +204,10 @@ export class RealGrpcWebClient {
       // Decode response
       const response = decodeSendMessageResponse(responseData);
 
-      console.log('[RealGrpcWebClient] Group message sent:', response.message_id);
+      console.log(
+        '[RealGrpcWebClient] Group message sent:',
+        response.message_id
+      );
 
       return response;
     } catch (error) {
@@ -195,7 +219,10 @@ export class RealGrpcWebClient {
   /**
    * Get message history with a peer (REAL IMPLEMENTATION)
    */
-  async getMessageHistory(peerId: string, limit: number = 50): Promise<Message[]> {
+  async getMessageHistory(
+    peerId: string,
+    limit: number = 50
+  ): Promise<Message[]> {
     try {
       console.log('[RealGrpcWebClient] Getting message history for', peerId);
 
@@ -212,7 +239,11 @@ export class RealGrpcWebClient {
       // Decode response
       const messages = decodeMessageHistoryResponse(responseData);
 
-      console.log('[RealGrpcWebClient] Message history received:', messages.length, 'messages');
+      console.log(
+        '[RealGrpcWebClient] Message history received:',
+        messages.length,
+        'messages'
+      );
 
       return messages;
     } catch (error) {
@@ -238,6 +269,12 @@ export class RealGrpcWebClient {
         const requestData = encodeReceiveMessagesRequest();
         const url = `${GRPC_WEB_HOST}/${MESSAGE_SERVICE}/ReceiveMessages`;
 
+        console.log('[RealGrpcWebClient] Making streaming request to:', url);
+        console.log(
+          '[RealGrpcWebClient] Request data:',
+          Array.from(requestData)
+        );
+
         const response = await fetch(url, {
           method: 'POST',
           headers: {
@@ -252,18 +289,91 @@ export class RealGrpcWebClient {
           throw new Error(`Streaming failed: ${response.status}`);
         }
 
-        // For now, this is a placeholder
-        // Full streaming implementation requires reading the response body as a stream
         console.log('[RealGrpcWebClient] Message streaming connected');
+        console.log(
+          '[RealGrpcWebClient] Response headers:',
+          Object.fromEntries(response.headers.entries())
+        );
 
-        // TODO: Implement proper streaming with ReadableStream
-        // const reader = response.body?.getReader();
-        // while (!cancelled && reader) {
-        //   const { done, value } = await reader.read();
-        //   if (done) break;
-        //   // Parse and decode each message frame
-        // }
+        // Handle streaming response
+        if (response.body) {
+          const reader = response.body.getReader();
 
+          try {
+            while (!cancelled) {
+              const { done, value } = await reader.read();
+              if (done) {
+                console.log('[RealGrpcWebClient] Stream ended');
+                break;
+              }
+
+              if (value && value.length > 0) {
+                console.log(
+                  '[RealGrpcWebClient] Received data chunk:',
+                  value.length,
+                  'bytes'
+                );
+
+                // Parse gRPC-Web streaming response
+                // Each chunk might contain multiple gRPC frames
+                let offset = 0;
+                while (offset < value.length && !cancelled) {
+                  if (offset + 5 > value.length) {
+                    // Not enough data for a complete frame header
+                    break;
+                  }
+
+                  // Read gRPC frame header
+                  const compressed = value[offset];
+                  const length =
+                    (value[offset + 1] << 24) |
+                    (value[offset + 2] << 16) |
+                    (value[offset + 3] << 8) |
+                    value[offset + 4];
+
+                  if (compressed !== 0) {
+                    console.warn(
+                      '[RealGrpcWebClient] Compressed frames not supported'
+                    );
+                    break;
+                  }
+
+                  if (offset + 5 + length > value.length) {
+                    // Not enough data for complete message
+                    break;
+                  }
+
+                  // Extract message data
+                  const messageData = value.slice(
+                    offset + 5,
+                    offset + 5 + length
+                  );
+
+                  try {
+                    // Decode the message
+                    const message = decodeMessage(messageData);
+                    console.log(
+                      '[RealGrpcWebClient] Decoded message:',
+                      message
+                    );
+                    callback(message);
+                  } catch (decodeError) {
+                    console.error(
+                      '[RealGrpcWebClient] Failed to decode message:',
+                      decodeError
+                    );
+                  }
+
+                  offset += 5 + length;
+                }
+              }
+            }
+          } finally {
+            reader.releaseLock();
+          }
+        } else {
+          console.warn('[RealGrpcWebClient] No response body for streaming');
+        }
       } catch (error) {
         if (!cancelled) {
           console.error('[RealGrpcWebClient] Streaming error:', error);
@@ -276,6 +386,91 @@ export class RealGrpcWebClient {
       cancelled = true;
       console.log('[RealGrpcWebClient] Unsubscribed from messages');
     };
+  }
+
+  /**
+   * Get all peers
+   */
+  async getPeers(): Promise<Peer[]> {
+    try {
+      console.log('[RealGrpcWebClient] Getting peers');
+
+      const requestData = encodeGetPeersRequest();
+      console.log('[RealGrpcWebClient] Request data:', Array.from(requestData));
+      console.log(
+        '[RealGrpcWebClient] Making gRPC call to',
+        PEER_SERVICE,
+        'GetPeers'
+      );
+
+      const responseData = await grpcUnaryCall(
+        PEER_SERVICE,
+        'GetPeers',
+        requestData
+      );
+      console.log(
+        '[RealGrpcWebClient] Response data length:',
+        responseData.length
+      );
+
+      const response = decodeGetPeersResponse(responseData);
+      console.log(`[RealGrpcWebClient] Got ${response.peers.length} peers`);
+
+      return response.peers;
+    } catch (error) {
+      console.error('[RealGrpcWebClient] getPeers error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get a specific peer by ID
+   */
+  async getPeer(peerId: string): Promise<Peer | null> {
+    try {
+      console.log(`[RealGrpcWebClient] Getting peer: ${peerId}`);
+
+      const requestData = encodeGetPeerRequest(peerId);
+      const responseData = await grpcUnaryCall(
+        PEER_SERVICE,
+        'GetPeer',
+        requestData
+      );
+
+      const response = decodeGetPeerResponse(responseData);
+      console.log(`[RealGrpcWebClient] Peer found: ${response.found}`);
+
+      return response.found ? response.peer : null;
+    } catch (error) {
+      console.error('[RealGrpcWebClient] getPeer error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get only connected peers
+   */
+  async getConnectedPeers(): Promise<Peer[]> {
+    try {
+      console.log('[RealGrpcWebClient] Getting connected peers');
+
+      const requestData = encodeGetConnectedPeersRequest();
+      const responseData = await grpcUnaryCall(
+        PEER_SERVICE,
+        'GetConnectedPeers',
+        requestData
+      );
+
+      const response = decodeGetConnectedPeersResponse(responseData);
+      console.log(
+        `[RealGrpcWebClient] Got ${response.peers.length} connected peers`
+      );
+
+      return response.peers;
+    } catch (error) {
+      console.error('[RealGrpcWebClient] getConnectedPeers error:', error);
+      throw error;
+    }
   }
 
   /**

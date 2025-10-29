@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Standard gRPC-Web Test</title>
+  </head>
+  <body>
+    <h1>Standard gRPC-Web Test</h1>
+    <button onclick="testStandardGrpcWeb()">Test Standard gRPC-Web</button>
+    <div id="result"></div>
+
+    <script>
+      async function testStandardGrpcWeb() {
+          const result = document.getElementById('result');
+          result.innerHTML = 'Testing...';
+
+          try {
+              console.log('Testing standard gRPC-Web request...');
+
+              const response = await fetch('http://localhost:9001/ledabeer.PeerService/GetPeers', {
+                  method: 'POST',
+                  headers: {
+                      'Content-Type': 'application/grpc-web',
+                      'Accept': 'application/grpc-web',
+                      'Cache-Control': 'no-cache'
+                  },
+                  body: new Uint8Array([0x00, 0x00, 0x00, 0x00, 0x00])
+              });
+
+              console.log('Response status:', response.status);
+              console.log('Response headers:', [...response.headers.entries()]);
+
+              if (response.ok) {
+                  const data = await response.arrayBuffer();
+                  console.log('Response data length:', data.byteLength);
+                  result.innerHTML = `Success! Status: ${response.status}, Data: ${data.byteLength} bytes`;
+              } else {
+                  result.innerHTML = `Error! Status: ${response.status} ${response.statusText}`;
+              }
+
+          } catch (error) {
+              console.error('Error:', error);
+              result.innerHTML = `Error: ${error.message}`;
+          }
+      }
+    </script>
+  </body>
+</html>
+

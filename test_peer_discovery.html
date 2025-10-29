@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Peer Discovery Test</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 20px; }
+      .log { background-color: #f5f5f5; padding: 10px; margin: 5px 0; border-radius: 3px; font-family: monospace; font-size: 12px; max-height: 400px; overflow-y: auto; }
+      button { margin: 5px; padding: 8px 16px; }
+    </style>
+  </head>
+  <body>
+    <h1>Peer Discovery Test</h1>
+    <p>Test the peer discovery functionality to see available backend peers.</p>
+
+    <button onclick="testPeerDiscovery()">🔍 Test Peer Discovery</button>
+    <button onclick="testPeerDetails()">👤 Test Peer Details</button>
+    <button onclick="testConnectedPeers()">🔗 Test Connected Peers</button>
+
+    <div id="log" class="log"></div>
+
+    <script>
+      function log(message) {
+          const logDiv = document.getElementById('log');
+          const timestamp = new Date().toLocaleTimeString();
+          logDiv.innerHTML += `<div>[${timestamp}] ${message}</div>`;
+          logDiv.scrollTop = logDiv.scrollHeight;
+      }
+
+      async function testPeerDiscovery() {
+          log("🔍 Testing GetPeers endpoint...");
+
+          try {
+              const requestData = new Uint8Array([0x00, 0x00, 0x00, 0x00, 0x00]);
+
+              const response = await fetch('http://localhost:8080/ledabeer.PeerService/GetPeers', {
+                  method: 'POST',
+                  headers: {
+                      'Content-Type': 'application/grpc-web+proto',
+                      'X-Grpc-Web': '1',
+                      'X-User-Agent': 'grpc-web-javascript/0.1',
+                  },
+                  body: requestData,
+              });
+
+              if (!response.ok) {
+                  throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+              }
+
+              const buffer = await response.arrayBuffer();
+              const data = new Uint8Array(buffer);
+
+              log(`✅ GetPeers response received: ${data.length} bytes`);
+
+              // Skip gRPC frame header (5 bytes) and parse protobuf
+              const protobufData = data.slice(5);
+              log(`📦 Protobuf data: ${protobufData.length} bytes`);
+
+              // Show first 50 bytes as hex
+              const hex = Array.from(protobufData.slice(0, Math.min(50, protobufData.length)))
+                  .map(b => '0x' + b.toString(16).padStart(2, '0'))
+                  .join(' ');
+              log(`🔍 First 50 bytes: ${hex}${protobufData.length > 50 ? '...' : ''}`);
+
+              // Simple protobuf parsing for GetPeersResponse
+              let offset = 0;
+              const peers = [];
+
+              while (offset < protobufData.length) {
+                  const tag = protobufData[offset++];
+                  if (tag === 0x0a) { // Field 1: repeated Peer peers
+                      const length = protobufData[offset++];
+                      const peerData = protobufData.slice(offset, offset + length);
+                      offset += length;
+
+                      // Parse peer data
+                      let peerOffset = 0;
+                      let peerId = null;
+                      let online = false;
+                      let addresses = [];
+
+                      while (peerOffset < peerData.length) {
+                          const peerTag = peerData[peerOffset++];
+                          if (peerTag === 0x0a) { // Field 1: id
+                              const idLength = peerData[peerOffset++];
+                              peerId = new TextDecoder().decode(peerData.slice(peerOffset, peerOffset + idLength));
+                              peerOffset += idLength;
+                          } else if (peerTag === 0x12) { // Field 2: addresses
+                              const addrLength = peerData[peerOffset++];
+                              const addr = new TextDecoder().decode(peerData.slice(peerOffset, peerOffset + addrLength));
+                              addresses.push(addr);
+                              peerOffset += addrLength;
+                          } else if (peerTag === 0x18) { // Field 3: online
+                              online = peerData[peerOffset++] === 1;
+                          } else {
+                              // Skip unknown field
+                              peerOffset++;
+                          }
+                      }
+
+                      peers.push({ id: peerId, online, addresses });
+                  } else {
+                      // Skip unknown field
+                      offset++;
+                  }
+              }
+
+              log(`✅ Found ${peers.length} peers:`);
+              peers.forEach((peer, index) => {
+                  log(`  Peer ${index + 1}: ${peer.id}`);
+                  log(`    Online: ${peer.online}`);
+                  log(`    Addresses: ${peer.addresses.join(', ')}`);
+              });
+
+          } catch (error) {
+              log(`❌ Error: ${error.message}`);
+          }
+      }
+
+      async function testPeerDetails() {
+          log("👤 Testing GetPeer endpoint...");
+
+          // First get a list of peers
+          try {
+              const requestData = new Uint8Array([0x00, 0x00, 0x00, 0x00, 0x00]);
+
+              const response = await fetch('http://localhost:8080/ledabeer.PeerService/GetPeers', {
+                  method: 'POST',
+                  headers: {
+                      'Content-Type': 'application/grpc-web+proto',
+                      'X-Grpc-Web': '1',
+                      'X-User-Agent': 'grpc-web-javascript/0.1',
+                  },
+                  body: requestData,
+              });
+
+              if (!response.ok) {
+                  throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+              }
+
+              const buffer = await response.arrayBuffer();
+              const data = new Uint8Array(buffer);
+              const protobufData = data.slice(5);
+
+              // Get first peer ID
+              let offset = 0;
+              let firstPeerId = null;
+
+              while (offset < protobufData.length && !firstPeerId) {
+                  const tag = protobufData[offset++];
+                  if (tag === 0x0a) { // Field 1: repeated Peer peers
+                      const length = protobufData[offset++];
+                      const peerData = protobufData.slice(offset, offset + length);
+                      offset += length;
+
+                      let peerOffset = 0;
+                      while (peerOffset < peerData.length && !firstPeerId) {
+                          const peerTag = peerData[peerOffset++];
+                          if (peerTag === 0x0a) { // Field 1: id
+                              const idLength = peerData[peerOffset++];
+                              firstPeerId = new TextDecoder().decode(peerData.slice(peerOffset, peerOffset + idLength));
+                              peerOffset += idLength;
+                          } else {
+                              peerOffset++;
+                          }
+                      }
+                  } else {
+                      offset++;
+                  }
+              }
+
+              if (!firstPeerId) {
+                  log("❌ No peer ID found to test GetPeer");
+                  return;
+              }
+
+              log(`🎯 Testing GetPeer for: ${firstPeerId}`);
+
+              // Now test GetPeer with this ID
+              const encoder = new TextEncoder();
+              const peerIdBytes = encoder.encode(firstPeerId);
+
+              const output = [];
+              output.push(0x0a); // Tag: field 1, wire type 2 (length-delimited)
+              output.push(peerIdBytes.length); // Length
+              output.push(...Array.from(peerIdBytes)); // Data
+
+              const protobufData2 = new Uint8Array(output);
+              const length = protobufData2.length;
+              const frame = new Uint8Array(5 + length);
+              frame[0] = 0x00; // No compression
+              frame[1] = (length >> 24) & 0xff; // Length (big-endian)
+              frame[2] = (length >> 16) & 0xff;
+              frame[3] = (length >> 8) & 0xff;
+              frame[4] = length & 0xff;
+              frame.set(protobufData2, 5);
+
+              const response2 = await fetch('http://localhost:8080/ledabeer.PeerService/GetPeer', {
+                  method: 'POST',
+                  headers: {
+                      'Content-Type': 'application/grpc-web+proto',
+                      'X-Grpc-Web': '1',
+                      'X-User-Agent': 'grpc-web-javascript/0.1',
+                  },
+                  body: frame,
+              });
+
+              if (!response2.ok) {
+                  throw new Error(`HTTP ${response2.status}: ${response2.statusText}`);
+              }
+
+              const buffer2 = await response2.arrayBuffer();
+              const data2 = new Uint8Array(buffer2);
+
+              log(`✅ GetPeer response received: ${data2.length} bytes`);
+
+              const protobufData3 = data2.slice(5);
+              const hex = Array.from(protobufData3.slice(0, Math.min(50, protobufData3.length)))
+                  .map(b => '0x' + b.toString(16).padStart(2, '0'))
+                  .join(' ');
+              log(`🔍 Response data: ${hex}${protobufData3.length > 50 ? '...' : ''}`);
+
+          } catch (error) {
+              log(`❌ Error: ${error.message}`);
+          }
+      }
+
+      async function testConnectedPeers() {
+          log("🔗 Testing GetConnectedPeers endpoint...");
+
+          try {
+              const requestData = new Uint8Array([0x00, 0x00, 0x00, 0x00, 0x00]);
+
+              const response = await fetch('http://localhost:8080/ledabeer.PeerService/GetConnectedPeers', {
+                  method: 'POST',
+                  headers: {
+                      'Content-Type': 'application/grpc-web+proto',
+                      'X-Grpc-Web': '1',
+                      'X-User-Agent': 'grpc-web-javascript/0.1',
+                  },
+                  body: requestData,
+              });
+
+              if (!response.ok) {
+                  throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+              }
+
+              const buffer = await response.arrayBuffer();
+              const data = new Uint8Array(buffer);
+
+              log(`✅ GetConnectedPeers response received: ${data.length} bytes`);
+
+              const protobufData = data.slice(5);
+              const hex = Array.from(protobufData.slice(0, Math.min(50, protobufData.length)))
+                  .map(b => '0x' + b.toString(16).padStart(2, '0'))
+                  .join(' ');
+              log(`🔍 Response data: ${hex}${protobufData.length > 50 ? '...' : ''}`);
+
+          } catch (error) {
+              log(`❌ Error: ${error.message}`);
+          }
+      }
+
+      // Auto-test on page load
+      window.onload = function() {
+          log("🎯 Peer Discovery Test Ready - Click buttons to test different endpoints");
+          setTimeout(testPeerDiscovery, 1000);
+      };
+    </script>
+  </body>
+</html>

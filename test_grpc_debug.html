@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>gRPC-Web Debug Test</title>
+  </head>
+  <body>
+    <h1>gRPC-Web Debug Test</h1>
+    <button onclick="testWithXHR()">Test with XMLHttpRequest</button>
+    <button onclick="testWithFetch()">Test with Fetch</button>
+    <div id="output"></div>
+
+    <script>
+      // Test with XMLHttpRequest (lower-level, more control)
+      function testWithXHR() {
+          const output = document.getElementById('output');
+          output.innerHTML = 'Testing with XMLHttpRequest...<br>';
+
+          const xhr = new XMLHttpRequest();
+          xhr.open('POST', 'http://localhost:9001/ledabeer.PeerService/GetPeers', true);
+          xhr.setRequestHeader('Content-Type', 'application/grpc-web+proto');
+          xhr.setRequestHeader('grpc-timeout', '10s');
+          xhr.responseType = 'arraybuffer';
+
+          xhr.onload = function() {
+              output.innerHTML += `XHR Status: ${xhr.status}<br>`;
+              output.innerHTML += `XHR Response: ${xhr.response ? xhr.response.byteLength : 0} bytes<br>`;
+
+              if (xhr.status === 200) {
+                  const data = new Uint8Array(xhr.response);
+                  output.innerHTML += `Success! Data: ${Array.from(data.slice(0, 50)).map(b => b.toString(16).padStart(2, '0')).join(' ')}<br>`;
+              } else {
+                  output.innerHTML += `Error: ${xhr.statusText}<br>`;
+              }
+          };
+
+          xhr.onerror = function() {
+              output.innerHTML += `XHR Error occurred<br>`;
+          };
+
+          // Send the gRPC frame header
+          const frame = new Uint8Array([0x00, 0x00, 0x00, 0x00, 0x00]);
+          xhr.send(frame);
+      }
+
+      // Test with Fetch API
+      async function testWithFetch() {
+          const output = document.getElementById('output');
+          output.innerHTML = 'Testing with Fetch...<br>';
+
+          try {
+              const frame = new Uint8Array([0x00, 0x00, 0x00, 0x00, 0x00]);
+
+              const response = await fetch('http://localhost:9001/ledabeer.PeerService/GetPeers', {
+                  method: 'POST',
+                  headers: {
+                      'Content-Type': 'application/grpc-web+proto',
+                      'grpc-timeout': '10s'
+                  },
+                  body: frame
+              });
+
+              output.innerHTML += `Fetch Status: ${response.status}<br>`;
+
+              if (response.ok) {
+                  const data = await response.arrayBuffer();
+                  const bytes = new Uint8Array(data);
+                  output.innerHTML += `Success! Data: ${Array.from(bytes.slice(0, 50)).map(b => b.toString(16).padStart(2, '0')).join(' ')}<br>`;
+              } else {
+                  const text = await response.text();
+                  output.innerHTML += `Error: ${text}<br>`;
+              }
+
+          } catch (error) {
+              output.innerHTML += `Fetch Error: ${error.message}<br>`;
+          }
+      }
+    </script>
+  </body>
+</html>
+

@@ -1,0 +1,43 @@
+syntax = "proto3";
+package ledabeer;
+
+option go_package = "ledabeer/backend/pkg/proto";
+
+service PeerService {
+    rpc GetPeers(GetPeersRequest) returns (GetPeersResponse);
+    rpc GetPeer(GetPeerRequest) returns (GetPeerResponse);
+    rpc GetConnectedPeers(GetConnectedPeersRequest) returns (GetConnectedPeersResponse);
+}
+
+message GetPeersRequest {
+    // Empty for now, could add filters later
+}
+
+message GetPeersResponse {
+    repeated Peer peers = 1;
+}
+
+message GetPeerRequest {
+    string peer_id = 1;
+}
+
+message GetPeerResponse {
+    Peer peer = 1;
+    bool found = 2;
+}
+
+message GetConnectedPeersRequest {
+    // Empty for now
+}
+
+message GetConnectedPeersResponse {
+    repeated Peer peers = 1;
+}
+
+message Peer {
+    string id = 1;
+    string name = 2;
+    bool online = 3;
+    int64 last_seen = 4;
+    repeated string addresses = 5;
+}

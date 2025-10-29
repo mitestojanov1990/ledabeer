@@ -104,7 +104,7 @@ func TestMessageService_RealMessaging_GroupMessage(t *testing.T) {
 
 	// Create group
 	groupID := "test-group"
-	groupManager.CreateGroup(groupID, []string{host1.ID().String()})
+	groupManager.CreateGroup(ctx, groupID)
 
 	req := &pb.SendGroupMessageRequest{
 		GroupId: groupID,

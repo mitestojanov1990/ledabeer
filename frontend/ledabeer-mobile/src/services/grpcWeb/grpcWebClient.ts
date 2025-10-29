@@ -4,7 +4,7 @@
  * Browser-compatible gRPC client using grpc-web
  */
 
-import { grpc } from 'grpc-web';
+import * as grpc from 'grpc-web';
 
 // Envoy proxy URL (will proxy to gRPC backend)
 const GRPC_WEB_URL = 'http://localhost:8080';
@@ -76,7 +76,10 @@ class GrpcWebClient {
    * Note: This is a manual implementation until we set up Envoy proxy
    * For now, it will fall back to mock backend
    */
-  async sendMessage(toPeerId: string, content: string): Promise<SendMessageResponse> {
+  async sendMessage(
+    toPeerId: string,
+    content: string
+  ): Promise<SendMessageResponse> {
     try {
       console.log('[GrpcWebClient] sendMessage not fully implemented yet');
 
@@ -97,9 +100,14 @@ class GrpcWebClient {
   /**
    * Get message history with a peer
    */
-  async getMessageHistory(peerId: string, limit: number = 50): Promise<GrpcMessage[]> {
+  async getMessageHistory(
+    peerId: string,
+    limit: number = 50
+  ): Promise<GrpcMessage[]> {
     try {
-      console.log('[GrpcWebClient] getMessageHistory not fully implemented yet');
+      console.log(
+        '[GrpcWebClient] getMessageHistory not fully implemented yet'
+      );
 
       // TODO: Make actual gRPC-Web call once Envoy is set up
 

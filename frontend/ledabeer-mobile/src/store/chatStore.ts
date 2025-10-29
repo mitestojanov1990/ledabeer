@@ -5,7 +5,7 @@
  */
 
 import { create } from 'zustand';
-import { getBackendService, MockMessage as Message, Peer, Group } from '../services/backend';
+import { getBackendService, Message, Peer, Group } from '../services/backend';
 
 // Get backend service instance
 const backendService = getBackendService();
@@ -73,7 +73,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       set((state) => ({
         messages: {
           ...state.messages,
-          [conversationId]: [...(state.messages[conversationId] || []), message],
+          [conversationId]: [
+            ...(state.messages[conversationId] || []),
+            message,
+          ],
         },
       }));
     } catch (error) {

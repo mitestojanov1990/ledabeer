@@ -1,0 +1,95 @@
+syntax = "proto3";
+package ledabeer;
+
+option go_package = "ledabeer/backend/pkg/proto";
+
+service GroupService {
+    rpc GetGroups(GetGroupsRequest) returns (GetGroupsResponse);
+    rpc GetGroup(GetGroupRequest) returns (GetGroupResponse);
+    rpc CreateGroup(CreateGroupRequest) returns (CreateGroupResponse);
+    rpc JoinGroup(JoinGroupRequest) returns (JoinGroupResponse);
+    rpc LeaveGroup(LeaveGroupRequest) returns (LeaveGroupResponse);
+    rpc AddMember(AddMemberRequest) returns (AddMemberResponse);
+    rpc RemoveMember(RemoveMemberRequest) returns (RemoveMemberResponse);
+    rpc GetGroupMembers(GetGroupMembersRequest) returns (GetGroupMembersResponse);
+}
+
+message GetGroupsRequest {
+    // Empty for now
+}
+
+message GetGroupsResponse {
+    repeated Group groups = 1;
+}
+
+message GetGroupRequest {
+    string group_id = 1;
+}
+
+message GetGroupResponse {
+    Group group = 1;
+    bool found = 2;
+}
+
+message CreateGroupRequest {
+    string group_id = 1;
+    string name = 2;
+    string description = 3;
+    repeated string member_ids = 4;
+}
+
+message CreateGroupResponse {
+    Group group = 1;
+    bool success = 2;
+}
+
+message JoinGroupRequest {
+    string group_id = 1;
+}
+
+message JoinGroupResponse {
+    bool success = 1;
+}
+
+message LeaveGroupRequest {
+    string group_id = 1;
+}
+
+message LeaveGroupResponse {
+    bool success = 1;
+}
+
+message AddMemberRequest {
+    string group_id = 1;
+    string member_id = 2;
+}
+
+message AddMemberResponse {
+    bool success = 1;
+}
+
+message RemoveMemberRequest {
+    string group_id = 1;
+    string member_id = 2;
+}
+
+message RemoveMemberResponse {
+    bool success = 1;
+}
+
+message GetGroupMembersRequest {
+    string group_id = 1;
+}
+
+message GetGroupMembersResponse {
+    repeated string member_ids = 1;
+}
+
+message Group {
+    string id = 1;
+    string name = 2;
+    string description = 3;
+    repeated string member_ids = 4;
+    int64 created_at = 5;
+    int32 key_version = 6;
+}

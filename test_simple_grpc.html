@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Simple gRPC-Web Test</title>
+  </head>
+  <body>
+    <h1>Simple gRPC-Web Test</h1>
+    <button onclick="testGrpcWeb()">Test gRPC-Web</button>
+    <div id="output"></div>
+
+    <script>
+      async function testGrpcWeb() {
+          const output = document.getElementById('output');
+          output.innerHTML = 'Testing...<br>';
+          console.log('testGrpcWeb function called');
+
+          try {
+              console.log('Making gRPC-Web request...');
+              output.innerHTML += 'Making gRPC-Web request...<br>';
+
+              // Create proper gRPC frame header
+              const messageLength = 0;
+              const frame = new Uint8Array(5);
+              frame[0] = 0x00; // compression flag
+              frame[1] = 0x00; // message length (3 bytes, big-endian)
+              frame[2] = 0x00;
+              frame[3] = (messageLength >> 8) & 0xff;
+              frame[4] = messageLength & 0xff;
+
+              console.log('Request body:', frame);
+              output.innerHTML += `Request body: ${Array.from(frame).join(', ')}<br>`;
+
+              const response = await fetch('http://localhost:9001/ledabeer.PeerService/GetPeers', {
+                  method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/grpc-web+proto'
+                    },
+                  body: frame.buffer
+              });
+
+              console.log('Response status:', response.status);
+              console.log('Response headers:', response.headers);
+
+              output.innerHTML += `Status: ${response.status}<br>`;
+              output.innerHTML += `Status Text: ${response.statusText}<br>`;
+
+              if (response.ok) {
+                  const data = await response.arrayBuffer();
+                  output.innerHTML += `Response size: ${data.byteLength} bytes<br>`;
+                  output.innerHTML += `Response data: ${Array.from(new Uint8Array(data)).map(b => b.toString(16).padStart(2, '0')).join(' ')}<br>`;
+              } else {
+                  const text = await response.text();
+                  output.innerHTML += `Error: ${text}<br>`;
+              }
+
+          } catch (error) {
+              console.error('Error:', error);
+              output.innerHTML += `Error: ${error.message}<br>`;
+          }
+      }
+    </script>
+  </body>
+</html>

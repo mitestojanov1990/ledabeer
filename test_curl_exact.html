@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Exact Curl Test</title>
+  </head>
+  <body>
+    <h1>Exact Curl Test</h1>
+    <p>This test sends the EXACT same headers as curl</p>
+    <button onclick="testExactCurl()">Test Exact Curl Format</button>
+    <div id="output"></div>
+
+    <script>
+      async function testExactCurl() {
+          const output = document.getElementById('output');
+          output.innerHTML = 'Testing with exact curl format...<br>';
+
+          try {
+              // Create the exact same binary data as curl
+              const frame = new Uint8Array([0x00, 0x00, 0x00, 0x00, 0x00]);
+
+              // Send with ONLY the Content-Type header (like curl)
+              const response = await fetch('http://localhost:9001/ledabeer.PeerService/GetPeers', {
+                  method: 'POST',
+                  headers: {
+                      'Content-Type': 'application/grpc-web+proto'
+                      // NO other headers
+                  },
+                  body: frame
+              });
+
+              output.innerHTML += `Status: ${response.status}<br>`;
+              output.innerHTML += `Status Text: ${response.statusText}<br>`;
+
+              if (response.ok) {
+                  const data = await response.arrayBuffer();
+                  const bytes = new Uint8Array(data);
+                  output.innerHTML += `✅ SUCCESS! Response size: ${bytes.length} bytes<br>`;
+                  output.innerHTML += `First 50 bytes: ${Array.from(bytes.slice(0, 50)).map(b => b.toString(16).padStart(2, '0')).join(' ')}<br>`;
+
+                  // Try to parse the response
+                  output.innerHTML += `<br>Raw response hex: ${Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join(' ')}<br>`;
+              } else {
+                  const text = await response.text();
+                  output.innerHTML += `❌ Error: ${text}<br>`;
+              }
+
+          } catch (error) {
+              output.innerHTML += `❌ Exception: ${error.message}<br>`;
+              console.error('Error:', error);
+          }
+      }
+    </script>
+  </body>
+</html>
+

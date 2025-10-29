@@ -2,26 +2,38 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"ledabeer/backend/internal/api"
 	"ledabeer/backend/internal/api/grpc"
 	"ledabeer/backend/internal/api/websocket"
 	"ledabeer/backend/internal/auth"
-	"ledabeer/backend/internal/calls"
+	"ledabeer/backend/internal/conversations"
 	"ledabeer/backend/internal/logging"
 	"ledabeer/backend/internal/media"
 	"ledabeer/backend/internal/messaging"
 	"ledabeer/backend/internal/network"
+	"ledabeer/backend/internal/user"
 	"ledabeer/backend/internal/storage"
 )
 
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	// Parse command line arguments
+	var (
+		isBootstrap   = flag.Bool("bootstrap", false, "Run as bootstrap node")
+		listenAddr    = flag.String("listen", "/ip4/0.0.0.0/tcp/4001", "Listen address")
+		bootstrapHost = flag.String("bootstrap-host", "", "Bootstrap host for peer discovery")
+		bootstrapPort = flag.String("bootstrap-port", "4001", "Bootstrap port for peer discovery")
+	)
+	flag.Parse()
 
 	// Initialize logging
 	logConfig, err := logging.ConfigFromEnv()
@@ -32,11 +44,17 @@ func main() {
 	logger := logging.NewLogger(logConfig)
 	logging.SetDefault(logger)
 
-	logger.Info("Starting Ledabeer backend")
+	if *isBootstrap {
+		logger.Info("Starting Ledabeer backend as bootstrap node")
+	} else {
+		logger.Info("Starting Ledabeer backend as peer node")
+	}
 
 	// Create libp2p host
 	host, err := network.NewHost(ctx, &network.Config{
-		ListenAddrs: []string{"/ip4/0.0.0.0/tcp/4001"},
+		ListenAddrs:   []string{*listenAddr},
+		BootstrapHost: *bootstrapHost,
+		BootstrapPort: *bootstrapPort,
 	})
 	if err != nil {
 		logger.Error("Failed to create host", logging.String("error", err.Error()))
@@ -60,22 +78,25 @@ func main() {
 		os.Exit(1)
 	}
 	mediaHandler := media.NewMediaHandler(ipfsNode)
-	callManager := calls.NewCallManager(host)
-
 	// Create real gRPC services
 	msgService := grpc.NewMessageService(msgHandler, groupManager)
 	mediaService := grpc.NewMediaService(mediaHandler)
-	callService := grpc.NewCallService(callManager)
+	peerService := grpc.NewPeerService(host)
+	groupService := grpc.NewGroupService(groupManager)
 
+	// Create authentication and conversation services
+	auth := auth.NewAuthenticator(nil) // Use memory repository for now
+	userManager := user.NewUserManager()
+	conversationService := conversations.NewConversationService(userManager)
+	
 	// Create WebSocket server
-	auth := auth.NewAuthenticator()
-	wsServer := websocket.NewServer(auth)
+	wsServer := websocket.NewServer(auth, conversationService)
 
 	// Create API gateway with real services
 	gateway := api.NewGateway(&api.Config{
 		GRPCPort: 50051,
 		HTTPPort: 8080,
-	}, msgService, mediaService, callService, wsServer)
+	}, host, msgHandler, msgService, mediaService, peerService, groupService, wsServer, auth)
 
 	// Logging is already integrated in the services
 
@@ -84,6 +105,9 @@ func main() {
 		logger.Error("Failed to start gateway", logging.String("error", err.Error()))
 		os.Exit(1)
 	}
+
+	// Wait a moment for servers to start
+	time.Sleep(100 * time.Millisecond)
 
 	logger.Info("Backend started successfully",
 		logging.String("peer_id", host.ID().String()),

@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Distributed P2P gRPC-Web Streaming Test - v2</title>
+    <style>
+      body {
+          font-family: Arial, sans-serif;
+          max-width: 1200px;
+          margin: 0 auto;
+          padding: 20px;
+          background-color: #f5f5f5;
+      }
+      .container {
+          display: flex;
+          gap: 20px;
+          margin-bottom: 20px;
+      }
+      .client {
+          flex: 1;
+          background: white;
+          padding: 20px;
+          border-radius: 8px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      }
+      .client h3 {
+          margin-top: 0;
+          color: #333;
+      }
+      .controls {
+          margin: 10px 0;
+      }
+      button {
+          background: #007bff;
+          color: white;
+          border: none;
+          padding: 10px 15px;
+          border-radius: 4px;
+          cursor: pointer;
+          margin: 5px;
+      }
+      button:hover {
+          background: #0056b3;
+      }
+      button:disabled {
+          background: #ccc;
+          cursor: not-allowed;
+      }
+      input[type="text"] {
+          width: 100%;
+          padding: 8px;
+          border: 1px solid #ddd;
+          border-radius: 4px;
+          margin: 5px 0;
+      }
+      .log {
+          background: #f8f9fa;
+          border: 1px solid #e9ecef;
+          border-radius: 4px;
+          padding: 10px;
+          height: 200px;
+          overflow-y: auto;
+          font-family: monospace;
+          font-size: 12px;
+          white-space: pre-wrap;
+      }
+      .status {
+          padding: 10px;
+          margin: 10px 0;
+          border-radius: 4px;
+          font-weight: bold;
+      }
+      .status.ready {
+          background: #d4edda;
+          color: #155724;
+          border: 1px solid #c3e6cb;
+      }
+      .status.error {
+          background: #f8d7da;
+          color: #721c24;
+          border: 1px solid #f5c6cb;
+      }
+      .status.info {
+          background: #d1ecf1;
+          color: #0c5460;
+          border: 1px solid #bee5eb;
+      }
+      .peer-info {
+          background: #e2e3e5;
+          padding: 10px;
+          border-radius: 4px;
+          margin: 10px 0;
+          font-family: monospace;
+          font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>🌐 Distributed P2P gRPC-Web Streaming Test</h1>
+    <p>
+      This test demonstrates the fully peer-to-peer architecture where each peer
+      node runs its own Envoy proxy and gRPC server.
+    </p>
+
+    <div class="status info">
+      <strong>Architecture:</strong> Alice Frontend → Alice Envoy → Alice Node →
+      Bob Node → Bob Subscribers<br />
+      <strong>Ports:</strong> Alice (9001), Bob (9002), Charlie (9003)
+    </div>
+
+    <div class="container">
+      <div class="client">
+        <h3>👤 Alice Client (Port 9001)</h3>
+        <div class="peer-info" id="alice-peer-info">
+          Connecting to Alice node...
+        </div>
+        <div class="controls">
+          <input
+            type="text"
+            id="alice-message"
+            placeholder="Enter message to send to Bob"
+            value="Hello from Alice!"
+          />
+          <button onclick="sendMessage('alice')">Send Message</button>
+          <button onclick="startStreaming('alice')">Start Listening</button>
+          <button onclick="stopStreaming('alice')">Stop Listening</button>
+        </div>
+        <div class="log" id="alice-log"></div>
+      </div>
+
+      <div class="client">
+        <h3>👤 Bob Client (Port 9002)</h3>
+        <div class="peer-info" id="bob-peer-info">
+          Connecting to Bob node...
+        </div>
+        <div class="controls">
+          <input
+            type="text"
+            id="bob-message"
+            placeholder="Enter message to send to Alice"
+            value="Hello from Bob!"
+          />
+          <button onclick="sendMessage('bob')">Send Message</button>
+          <button onclick="startStreaming('bob')">Start Listening</button>
+          <button onclick="stopStreaming('bob')">Stop Listening</button>
+        </div>
+        <div class="log" id="bob-log"></div>
+      </div>
+    </div>
+
+    <div class="status ready">
+      <strong>Test Instructions:</strong><br />
+      1. Click "Start Listening" on both clients<br />
+      2. Click "Send Message" on Alice to send to Bob<br />
+      3. Click "Send Message" on Bob to send to Alice<br />
+      4. Verify messages are received in real-time
+    </div>
+
+    <script>
+      // Configuration for distributed P2P architecture
+      const PEER_CONFIGS = {
+          alice: {
+              name: 'Alice',
+              port: 9001,
+              targetPeer: 'bob'
+          },
+          bob: {
+              name: 'Bob',
+              port: 9002,
+              targetPeer: 'alice'
+          }
+      };
+
+      let streams = {};
+      let peerIds = {};
+
+      // Initialize the test
+      window.onload = function() {
+          log('alice', '🎯 Distributed P2P Test Ready - Click "Start Listening" on both clients');
+          log('bob', '🎯 Distributed P2P Test Ready - Click "Start Listening" on both clients');
+
+          // Discover peers for each client
+          discoverPeers('alice');
+          discoverPeers('bob');
+      };
+
+      // Discover available peers for a specific client
+      async function discoverPeers(client) {
+          const config = PEER_CONFIGS[client];
+          try {
+              log(client, `🔍 Discovering peers via ${config.name} node (port ${config.port})...`);
+
+              const requestBody = new Uint8Array([0x00, 0x00, 0x00, 0x00, 0x00]);
+              log(client, `📤 Sending request body: ${requestBody.length} bytes`);
+
+               const response = await fetch(`http://localhost:${config.port}/api/peers?t=${Date.now()}`, {
+                   method: 'GET',
+                   headers: {
+                       'Cache-Control': 'no-cache'
+                   }
+               });
+
+              if (!response.ok) {
+                  throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+              }
+
+               const data = await response.json();
+               log(client, `✅ GetPeers response received: ${JSON.stringify(data).length} bytes`);
+
+               // Parse JSON response
+               const peers = data.peers || [];
+               log(client, `✅ Found ${peers.length} peers:`);
+
+               peers.forEach((peer, index) => {
+                   log(client, `Peer ${index + 1}: ${peer.id}`);
+                   log(client, `Online: ${peer.online}`);
+                   log(client, `Addresses: ${peer.addresses.join(', ')}`);
+               });
+
+              // Find target peer
+              const targetPeer = peers.find(p => p.id !== peerIds[client] && p.online);
+              if (targetPeer) {
+                  peerIds[config.targetPeer] = targetPeer.id;
+                  log(client, `🎯 Target peer (${config.targetPeer}): ${targetPeer.id}`);
+              } else {
+                  log(client, `⚠️ No online target peer found`);
+              }
+
+          } catch (error) {
+              log(client, `❌ Error discovering peers: ${error.message}`);
+          }
+      }
+
+      // Parse GetPeersResponse protobuf
+      function parseGetPeersResponse(data) {
+          const view = new DataView(data);
+          const peers = [];
+
+          try {
+              // Skip gRPC frame header (5 bytes)
+              let offset = 5;
+
+              // Read repeated Peer messages
+              while (offset < data.byteLength) {
+                  // Read field tag and wire type
+                  const tag = view.getUint8(offset++);
+                  if (tag === 0) break; // End of message
+
+                  const fieldNumber = tag >> 3;
+                  const wireType = tag & 0x07;
+
+                  if (fieldNumber === 1 && wireType === 2) { // repeated Peer peers = 1
+                      // Read length
+                      const length = view.getUint8(offset++);
+
+                      // Read peer data
+                      const peerData = new Uint8Array(data, offset, length);
+                      const peer = parsePeer(peerData);
+                      if (peer.id) {
+                          peers.push(peer);
+                      }
+
+                      offset += length;
+                  } else {
+                      // Skip unknown field
+                      offset++;
+                  }
+              }
+          } catch (error) {
+              console.error('Error parsing GetPeersResponse:', error);
+          }
+
+          return peers;
+      }
+
+      // Parse individual Peer protobuf
+      function parsePeer(data) {
+          const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+          const peer = { id: null, online: false, addresses: [] };
+
+          try {
+              let offset = 0;
+
+              while (offset < data.byteLength) {
+                  const tag = view.getUint8(offset++);
+                  if (tag === 0) break;
+
+                  const fieldNumber = tag >> 3;
+                  const wireType = tag & 0x07;
+
+                  if (fieldNumber === 1 && wireType === 2) { // string id = 1
+                      const length = view.getUint8(offset++);
+                      peer.id = new TextDecoder().decode(data.slice(offset, offset + length));
+                      offset += length;
+                  } else if (fieldNumber === 2 && wireType === 0) { // bool online = 2
+                      peer.online = view.getUint8(offset++) !== 0;
+                  } else if (fieldNumber === 3 && wireType === 2) { // repeated string addresses = 3
+                      const length = view.getUint8(offset++);
+                      const address = new TextDecoder().decode(data.slice(offset, offset + length));
+                      peer.addresses.push(address);
+                      offset += length;
+                  } else {
+                      // Skip unknown field
+                      offset++;
+                  }
+              }
+          } catch (error) {
+              console.error('Error parsing Peer:', error);
+          }
+
+          return peer;
+      }
+
+      // Start streaming messages
+      async function startStreaming(client) {
+          const config = PEER_CONFIGS[client];
+          try {
+              log(client, `🚀 Starting streaming for ${config.name}...`);
+
+              const response = await fetch(`http://localhost:${config.port}/ledabeer.MessageService/ReceiveMessages`, {
+                  method: 'POST',
+                  headers: {
+                      'Content-Type': 'application/grpc-web+proto'
+                  },
+                  body: new Uint8Array([0x00, 0x00, 0x00, 0x00, 0x00]) // gRPC frame header
+              });
+
+              if (!response.ok) {
+                  throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+              }
+
+              log(client, `✅ Connected to streaming endpoint`);
+
+              // Handle streaming response
+              const reader = response.body.getReader();
+              streams[client] = reader;
+
+              // Read messages continuously
+              while (true) {
+                  const { done, value } = await reader.read();
+                  if (done) break;
+
+                  // Parse gRPC frame
+                  const message = parseGrpcFrame(value);
+                  if (message) {
+                      log(client, `📨 Received: ${message.content}`);
+                  }
+              }
+
+          } catch (error) {
+              log(client, `❌ Streaming error: ${error.message}`);
+          }
+      }
+
+      // Stop streaming
+      function stopStreaming(client) {
+          if (streams[client]) {
+              streams[client].cancel();
+              delete streams[client];
+              log(client, '🛑 Streaming stopped');
+          }
+      }
+
+      // Send message
+      async function sendMessage(client) {
+          const config = PEER_CONFIGS[client];
+          const messageInput = document.getElementById(`${client}-message`);
+          const message = messageInput.value;
+
+          if (!message.trim()) {
+              log(client, '❌ Please enter a message');
+              return;
+          }
+
+          const targetPeerId = peerIds[config.targetPeer];
+          if (!targetPeerId) {
+              log(client, `❌ No target peer (${config.targetPeer}) discovered yet`);
+              return;
+          }
+
+          try {
+              log(client, `📤 Sending message: "${message}"`);
+
+              const response = await fetch(`http://localhost:${config.port}/api/send-message`, {
+                  method: 'POST',
+                  headers: {
+                      'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify({
+                      to: targetPeerId,
+                      content: message
+                  })
+              });
+
+              if (!response.ok) {
+                  throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+              }
+
+              const responseData = await response.json();
+              log(client, `✅ Message sent successfully: ${responseData.messageId}`);
+
+          } catch (error) {
+              log(client, `❌ Send error: ${error.message}`);
+          }
+      }
+
+      // Encode SendMessageRequest
+      function encodeSendMessageRequest(toPeerId, content) {
+          // Simple protobuf encoding for SendMessageRequest
+          const toPeerIdBytes = new TextEncoder().encode(toPeerId);
+          const contentBytes = new TextEncoder().encode(content);
+
+          // Field 1: string to_peer_id = 1
+          const field1 = new Uint8Array(1 + toPeerIdBytes.length);
+          field1[0] = 0x0a; // field 1, wire type 2
+          field1.set(toPeerIdBytes, 1);
+
+          // Field 2: bytes content = 2
+          const field2 = new Uint8Array(1 + contentBytes.length);
+          field2[0] = 0x12; // field 2, wire type 2
+          field2.set(contentBytes, 1);
+
+          // Combine fields
+          const message = new Uint8Array(field1.length + field2.length);
+          message.set(field1, 0);
+          message.set(field2, field1.length);
+
+          // Add gRPC frame header
+          const frame = new Uint8Array(5 + message.length);
+          frame[0] = 0x00; // compression flag
+          frame[1] = 0x00; // message length (3 bytes, big-endian)
+          frame[2] = 0x00;
+          frame[3] = (message.length >> 8) & 0xff;
+          frame[4] = message.length & 0xff;
+          frame.set(message, 5);
+
+          return frame;
+      }
+
+      // Parse gRPC frame
+      function parseGrpcFrame(data) {
+          if (data.length < 5) return null;
+
+          const view = new DataView(data.buffer, data.byteOffset, data.length);
+          const compressed = view.getUint8(0) !== 0;
+          const messageLength = (view.getUint8(1) << 16) | (view.getUint8(2) << 8) | view.getUint8(3);
+
+          if (compressed || messageLength === 0) return null;
+
+          const messageData = new Uint8Array(data, 5, messageLength);
+
+          // Parse Message protobuf
+          try {
+              const view = new DataView(messageData.buffer, messageData.byteOffset, messageData.length);
+              let offset = 0;
+              let content = '';
+
+              while (offset < messageData.length) {
+                  const tag = view.getUint8(offset++);
+                  if (tag === 0) break;
+
+                  const fieldNumber = tag >> 3;
+                  const wireType = tag & 0x07;
+
+                  if (fieldNumber === 3 && wireType === 2) { // string content = 3
+                      const length = view.getUint8(offset++);
+                      content = new TextDecoder().decode(messageData.slice(offset, offset + length));
+                      offset += length;
+                  } else {
+                      // Skip unknown field
+                      offset++;
+                  }
+              }
+
+              return { content };
+          } catch (error) {
+              console.error('Error parsing message:', error);
+              return null;
+          }
+      }
+
+      // Log function
+      function log(client, message) {
+          const timestamp = new Date().toLocaleTimeString();
+          const logElement = document.getElementById(`${client}-log`);
+          logElement.textContent += `[${timestamp}] ${message}\n`;
+          logElement.scrollTop = logElement.scrollHeight;
+      }
+    </script>
+  </body>
+</html>

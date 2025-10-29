@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Direct Inject Test</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 20px; }
+      .log { background-color: #f5f5f5; padding: 10px; margin: 5px 0; border-radius: 3px; font-family: monospace; font-size: 12px; max-height: 400px; overflow-y: auto; }
+      button { margin: 5px; padding: 8px 16px; }
+    </style>
+  </head>
+  <body>
+    <h1>Direct Inject Test</h1>
+    <p>
+      Test if we can inject a message directly into the message handler using
+      the test method.
+    </p>
+
+    <button onclick="startStreaming()">🚀 Start Streaming</button>
+    <button onclick="injectTestMessage()">💉 Inject Test Message</button>
+    <button onclick="stopStreaming()">🛑 Stop Streaming</button>
+
+    <div id="log" class="log"></div>
+
+    <script>
+      let reader = null;
+      let cancelled = false;
+
+      function log(message) {
+          const logDiv = document.getElementById('log');
+          const timestamp = new Date().toLocaleTimeString();
+          logDiv.innerHTML += `<div>[${timestamp}] ${message}</div>`;
+          logDiv.scrollTop = logDiv.scrollHeight;
+      }
+
+      async function startStreaming() {
+          log("🚀 Starting streaming...");
+          cancelled = false;
+
+          try {
+              const requestData = new Uint8Array([0x00, 0x00, 0x00, 0x00, 0x00]);
+
+              const response = await fetch('http://localhost:8080/ledabeer.MessageService/ReceiveMessages', {
+                  method: 'POST',
+                  headers: {
+                      'Content-Type': 'application/grpc-web+proto',
+                      'X-Grpc-Web': '1',
+                      'X-User-Agent': 'grpc-web-javascript/0.1',
+                  },
+                  body: requestData,
+              });
+
+              if (!response.ok) {
+                  throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+              }
+
+              log(`✅ Connected to streaming endpoint (HTTP ${response.status})`);
+              log(`📡 Waiting for messages...`);
+
+              if (response.body) {
+                  reader = response.body.getReader();
+
+                  try {
+                      let messageCount = 0;
+                      while (!cancelled) {
+                          const { done, value } = await reader.read();
+                          if (done) {
+                              log(`🔚 Stream ended`);
+                              break;
+                          }
+
+                          if (value && value.length > 0) {
+                              messageCount++;
+                              log(`📦 Received message ${messageCount}: ${value.length} bytes`);
+
+                              // Try to decode as protobuf message
+                              try {
+                                  const protobufData = value.slice(5); // Skip gRPC frame header
+
+                                  // Simple protobuf parsing for Message
+                                  let offset = 0;
+                                  let messageId = null;
+                                  let fromPeerId = null;
+                                  let content = null;
+                                  let timestamp = null;
+
+                                  while (offset < protobufData.length) {
+                                      const tag = protobufData[offset++];
+                                      if (tag === 0x0a) { // Field 1: message_id
+                                          const length = protobufData[offset++];
+                                          messageId = new TextDecoder().decode(protobufData.slice(offset, offset + length));
+                                          offset += length;
+                                      } else if (tag === 0x12) { // Field 2: from_peer_id
+                                          const length = protobufData[offset++];
+                                          fromPeerId = new TextDecoder().decode(protobufData.slice(offset, offset + length));
+                                          offset += length;
+                                      } else if (tag === 0x1a) { // Field 3: content
+                                          const length = protobufData[offset++];
+                                          content = new TextDecoder().decode(protobufData.slice(offset, offset + length));
+                                          offset += length;
+                                      } else if (tag === 0x20) { // Field 4: timestamp
+                                          timestamp = protobufData[offset++];
+                                      } else {
+                                          offset++;
+                                      }
+                                  }
+
+                                  log(`   Message ID: ${messageId}`);
+                                  log(`   From Peer: ${fromPeerId}`);
+                                  log(`   Content: ${content}`);
+                                  log(`   Timestamp: ${timestamp}`);
+                              } catch (e) {
+                                  log(`   (Could not parse as protobuf: ${e.message})`);
+                              }
+                          }
+                      }
+                  } finally {
+                      reader.releaseLock();
+                      reader = null;
+                  }
+              } else {
+                  log(`❌ No response body`);
+              }
+          } catch (error) {
+              log(`❌ Error: ${error.message}`);
+          }
+      }
+
+      async function injectTestMessage() {
+          log("💉 Injecting test message via SendMessage...");
+
+          try {
+              // Send a message to a real peer to trigger the message handler
+              const toPeerId = "12D3KooWLLdJSTAygXJ72ypJhE36gJBc3pMe7xLbyqwRu9Ao5aVp"; // Alice's peer ID
+              const content = "Hello from direct inject test!";
+
+              // Create gRPC-Web request for SendMessage
+              const encoder = new TextEncoder();
+              const toPeerIdBytes = encoder.encode(toPeerId);
+              const contentBytes = encoder.encode(content);
+
+              const output = [];
+              // Field 1: to_peer_id (string)
+              output.push(0x0a); // Tag: field 1, wire type 2 (length-delimited)
+              output.push(toPeerIdBytes.length); // Length
+              output.push(...Array.from(toPeerIdBytes)); // Data
+              // Field 2: content (bytes)
+              output.push(0x12); // Tag: field 2, wire type 2 (length-delimited)
+              output.push(contentBytes.length); // Length
+              output.push(...Array.from(contentBytes)); // Data
+
+              // Wrap in gRPC frame
+              const protobufData = new Uint8Array(output);
+              const length = protobufData.length;
+              const frame = new Uint8Array(5 + length);
+              frame[0] = 0x00; // No compression
+              frame[1] = (length >> 24) & 0xff; // Length (big-endian)
+              frame[2] = (length >> 16) & 0xff;
+              frame[3] = (length >> 8) & 0xff;
+              frame[4] = length & 0xff;
+              frame.set(protobufData, 5);
+
+              const response = await fetch('http://localhost:8080/ledabeer.MessageService/SendMessage', {
+                  method: 'POST',
+                  headers: {
+                      'Content-Type': 'application/grpc-web+proto',
+                      'X-Grpc-Web': '1',
+                      'X-User-Agent': 'grpc-web-javascript/0.1',
+                  },
+                  body: frame,
+              });
+
+              if (response.ok) {
+                  const buffer = await response.arrayBuffer();
+                  const data = new Uint8Array(buffer);
+                  log(`✅ Message sent successfully (${data.length} bytes response)`);
+                  log(`🎯 Message sent to peer: ${toPeerId}`);
+              } else {
+                  log(`❌ Failed to send message: HTTP ${response.status}`);
+              }
+          } catch (error) {
+              log(`❌ Error sending message: ${error.message}`);
+          }
+      }
+
+      function stopStreaming() {
+          log("🛑 Stopping streaming...");
+          cancelled = true;
+          if (reader) {
+              reader.cancel();
+          }
+      }
+
+      // Auto-start streaming on page load
+      window.onload = function() {
+          log("🎯 Direct Inject Test Ready - Click 'Start Streaming' then 'Inject Test Message'");
+          setTimeout(startStreaming, 1000);
+      };
+    </script>
+  </body>
+</html>

@@ -23,8 +23,12 @@ interface ChatConversationScreenProps {
   onBack: () => void;
 }
 
-export function ChatConversationScreen({ peerId, onBack }: ChatConversationScreenProps) {
-  const { conversations, messages, sendMessage, getConversation } = useChatStore();
+export function ChatConversationScreen({
+  peerId,
+  onBack,
+}: ChatConversationScreenProps) {
+  const { conversations, messages, sendMessage, getConversation } =
+    useChatStore();
   const [inputText, setInputText] = useState('');
   const flatListRef = useRef<FlatList>(null);
 
@@ -57,7 +61,10 @@ export function ChatConversationScreen({ peerId, onBack }: ChatConversationScree
 
   const formatMessageTime = (timestamp: number) => {
     const date = new Date(timestamp);
-    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    return date.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
   };
 
   const renderMessage = ({ item }: { item: Message }) => {
@@ -67,7 +74,9 @@ export function ChatConversationScreen({ peerId, onBack }: ChatConversationScree
       <View
         style={[
           styles.messageContainer,
-          isOwnMessage ? styles.ownMessageContainer : styles.otherMessageContainer,
+          isOwnMessage
+            ? styles.ownMessageContainer
+            : styles.otherMessageContainer,
         ]}
       >
         <View
@@ -78,7 +87,9 @@ export function ChatConversationScreen({ peerId, onBack }: ChatConversationScree
         >
           <Text style={styles.messageText}>{item.content}</Text>
           <View style={styles.messageFooter}>
-            <Text style={styles.messageTime}>{formatMessageTime(item.timestamp)}</Text>
+            <Text style={styles.messageTime}>
+              {formatMessageTime(item.timestamp)}
+            </Text>
             {item.encrypted && <Text style={styles.encryptedIcon}>🔒</Text>}
           </View>
         </View>
@@ -109,9 +120,18 @@ export function ChatConversationScreen({ peerId, onBack }: ChatConversationScree
         <View style={styles.headerInfo}>
           <Text style={styles.headerTitle}>{peer.name}</Text>
           <View style={styles.statusContainer}>
-            <View style={[styles.statusDot, peer.online && styles.statusDotOnline]} />
+            <View
+              style={[
+                styles.statusDot,
+                'online' in peer && peer.online && styles.statusDotOnline,
+              ]}
+            />
             <Text style={styles.statusText}>
-              {peer.online ? 'Online' : 'Offline'}
+              {'online' in peer
+                ? peer.online
+                  ? 'Online'
+                  : 'Offline'
+                : 'Group'}
             </Text>
             <Text style={styles.encryptionBadge}>🔒 E2EE</Text>
           </View>
@@ -141,7 +161,9 @@ export function ChatConversationScreen({ peerId, onBack }: ChatConversationScree
         renderItem={renderMessage}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.messagesContainer}
-        onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+        onContentSizeChange={() =>
+          flatListRef.current?.scrollToEnd({ animated: false })
+        }
       />
 
       {/* Input Area */}
@@ -150,13 +172,16 @@ export function ChatConversationScreen({ peerId, onBack }: ChatConversationScree
           style={styles.input}
           value={inputText}
           onChangeText={setInputText}
-          placeholder="Type a message..."
-          placeholderTextColor="#6B7280"
+          placeholder='Type a message...'
+          placeholderTextColor='#6B7280'
           multiline
           maxLength={1000}
         />
         <TouchableOpacity
-          style={[styles.sendButton, inputText.trim().length === 0 && styles.sendButtonDisabled]}
+          style={[
+            styles.sendButton,
+            inputText.trim().length === 0 && styles.sendButtonDisabled,
+          ]}
           onPress={handleSend}
           disabled={inputText.trim().length === 0}
         >

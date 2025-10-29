@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>HTTP Test</title>
+</head>
+<body>
+    <h1>HTTP Test</h1>
+    <button onclick="testHttp()">Test HTTP</button>
+    <div id="output"></div>
+
+    <script>
+        async function testHttp() {
+            const output = document.getElementById('output');
+            output.innerHTML = 'Testing HTTP...<br>';
+            
+            try {
+                console.log('Making HTTP request...');
+                
+                const response = await fetch('http://localhost:9001/peers', {
+                    method: 'GET'
+                });
+                
+                console.log('Response status:', response.status);
+                
+                output.innerHTML += `Status: ${response.status}<br>`;
+                
+                if (response.ok) {
+                    const text = await response.text();
+                    output.innerHTML += `Response: ${text}<br>`;
+                } else {
+                    const text = await response.text();
+                    output.innerHTML += `Error: ${text}<br>`;
+                }
+                
+            } catch (error) {
+                console.error('Error:', error);
+                output.innerHTML += `Error: ${error.message}<br>`;
+            }
+        }
+    </script>
+</body>
+</html>
+

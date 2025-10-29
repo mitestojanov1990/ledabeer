@@ -20,9 +20,12 @@ services:
     container_name: ledabeer-alice
     ports:
       - "4002:4002"
+      - "50052:50051"  # gRPC port
+      - "8082:8080"    # HTTP port
     environment:
       - NODE_ROLE=alice
-      - BOOTSTRAP_PEER=/dns4/bootstrap/tcp/4001/p2p/12D3KooWBootstrap
+      - BOOTSTRAP_HOST=bootstrap
+      - BOOTSTRAP_PORT=4001
     networks:
       - ledabeer-network
     depends_on:
@@ -32,9 +35,26 @@ services:
         "node",
         "--listen",
         "/ip4/0.0.0.0/tcp/4002",
-        "--bootstrap-peer",
-        "/dns4/bootstrap/tcp/4001/p2p/12D3KooWBootstrap",
+        "--bootstrap-host",
+        "bootstrap",
+        "--bootstrap-port",
+        "4001",
       ]
+
+  # Alice Envoy sidecar
+  alice-envoy:
+    image: envoyproxy/envoy:v1.28-latest
+    container_name: ledabeer-alice-envoy
+    ports:
+      - "9001:8080"    # gRPC-Web port for Alice
+      - "9902:9901"    # Admin port for Alice
+    volumes:
+      - ./envoy-alice.yaml:/etc/envoy/envoy.yaml
+    networks:
+      - ledabeer-network
+    depends_on:
+      - alice
+    command: /usr/local/bin/envoy -c /etc/envoy/envoy.yaml
 
   # Bob node
   bob:
@@ -42,9 +62,12 @@ services:
     container_name: ledabeer-bob
     ports:
       - "4003:4003"
+      - "50053:50051"  # gRPC port
+      - "8083:8080"    # HTTP port
     environment:
       - NODE_ROLE=bob
-      - BOOTSTRAP_PEER=/dns4/bootstrap/tcp/4001/p2p/12D3KooWBootstrap
+      - BOOTSTRAP_HOST=bootstrap
+      - BOOTSTRAP_PORT=4001
     networks:
       - ledabeer-network
     depends_on:
@@ -54,9 +77,26 @@ services:
         "node",
         "--listen",
         "/ip4/0.0.0.0/tcp/4003",
-        "--bootstrap-peer",
-        "/dns4/bootstrap/tcp/4001/p2p/12D3KooWBootstrap",
+        "--bootstrap-host",
+        "bootstrap",
+        "--bootstrap-port",
+        "4001",
       ]
+
+  # Bob Envoy sidecar
+  bob-envoy:
+    image: envoyproxy/envoy:v1.28-latest
+    container_name: ledabeer-bob-envoy
+    ports:
+      - "9002:8080"    # gRPC-Web port for Bob
+      - "9903:9901"    # Admin port for Bob
+    volumes:
+      - ./envoy-bob.yaml:/etc/envoy/envoy.yaml
+    networks:
+      - ledabeer-network
+    depends_on:
+      - bob
+    command: /usr/local/bin/envoy -c /etc/envoy/envoy.yaml
 
   # Charlie node
   charlie:
@@ -64,9 +104,12 @@ services:
     container_name: ledabeer-charlie
     ports:
       - "4004:4004"
+      - "50054:50051"  # gRPC port
+      - "8084:8080"    # HTTP port
     environment:
       - NODE_ROLE=charlie
-      - BOOTSTRAP_PEER=/dns4/bootstrap/tcp/4001/p2p/12D3KooWBootstrap
+      - BOOTSTRAP_HOST=bootstrap
+      - BOOTSTRAP_PORT=4001
     networks:
       - ledabeer-network
     depends_on:
@@ -76,24 +119,28 @@ services:
         "node",
         "--listen",
         "/ip4/0.0.0.0/tcp/4004",
-        "--bootstrap-peer",
-        "/dns4/bootstrap/tcp/4001/p2p/12D3KooWBootstrap",
+        "--bootstrap-host",
+        "bootstrap",
+        "--bootstrap-port",
+        "4001",
       ]
 
-  # Envoy proxy for gRPC-Web
-  envoy:
+  # Charlie Envoy sidecar
+  charlie-envoy:
     image: envoyproxy/envoy:v1.28-latest
-    container_name: ledabeer-envoy
+    container_name: ledabeer-charlie-envoy
     ports:
-      - "8080:8080"
-      - "9901:9901"
+      - "9003:8080"    # gRPC-Web port for Charlie
+      - "9904:9901"    # Admin port for Charlie
     volumes:
-      - ./envoy.yaml:/etc/envoy/envoy.yaml
+      - ./envoy-charlie.yaml:/etc/envoy/envoy.yaml
     networks:
       - ledabeer-network
     depends_on:
-      - bootstrap
+      - charlie
     command: /usr/local/bin/envoy -c /etc/envoy/envoy.yaml
+
+  # Central Envoy proxy removed - each peer now has its own Envoy sidecar
 
 networks:
   ledabeer-network:
